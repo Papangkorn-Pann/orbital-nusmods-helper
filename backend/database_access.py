@@ -57,11 +57,11 @@ def get_cached_module(module_code: str):
         "module_code": row[0],
         "difficulty_score": row[1],
         "recommend_score": row[2],
-        "top_positive_comment": row[3],
+        "top_positive_comment_message": row[3],
         "top_positive_comment_likes": row[4],
-        "top_neutral_comment": row[5],
+        "top_neutral_comment_message": row[5],
         "top_neutral_comment_likes": row[6],
-        "top_negative_comment": row[7],
+        "top_negative_comment_message": row[7],
         "top_negative_comment_likes": row[8],
         "comment_count": row[9]
     }
