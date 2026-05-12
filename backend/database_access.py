@@ -84,12 +84,12 @@ def save_module_data(
         module_code,
         difficulty_score,
         recommend_score,
-        top_positive_comment["message"] if top_positive_comment["likes"] >= 0 else None,
-        top_positive_comment["likes"] if top_positive_comment["likes"] >= 0 else None,
-        top_neutral_comment["message"] if top_neutral_comment["likes"] >= 0 else None,
-        top_neutral_comment["likes"] if top_neutral_comment["likes"] >= 0 else None,
-        top_negative_comment["message"] if top_negative_comment["likes"] >= 0 else None,
-        top_negative_comment["likes"] if top_negative_comment["likes"] >= 0 else None,
+        top_positive_comment["message"],
+        top_positive_comment["likes"],
+        top_neutral_comment["message"],
+        top_neutral_comment["likes"],
+        top_negative_comment["message"],
+        top_negative_comment["likes"],
         comment_count  # Initialize comment_count to the provided value
     ))
 
