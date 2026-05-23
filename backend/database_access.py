@@ -1,10 +1,13 @@
 import sqlite3
+from pathlib import Path
 
-DB_PATH = "database/modules.db"
+DB_PATH = str(Path(__file__).parent.parent / "database" / "modules.db")
 
-#to be called once at main.py startup
+
 def init_db():
     conn = sqlite3.connect(DB_PATH)
+
+    # ── existing ──────────────────────────────────────────────────────────────
     conn.execute("""
         CREATE TABLE IF NOT EXISTS module_scores (
             module_code TEXT PRIMARY KEY,
@@ -25,76 +28,330 @@ def init_db():
             actual_gpa REAL
         )
     """)
+
+    # ── users ─────────────────────────────────────────────────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id TEXT PRIMARY KEY,
+            display_name TEXT DEFAULT 'Anonymous',
+            faculty TEXT,
+            year_of_study INTEGER,
+            course TEXT,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    # ── timetable ─────────────────────────────────────────────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS timetable_slots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            module_code TEXT NOT NULL,
+            lesson_type TEXT NOT NULL,
+            class_no TEXT NOT NULL,
+            sem INTEGER DEFAULT 1,
+            UNIQUE(user_id, module_code, lesson_type, sem),
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+    """)
+
+    # ── study timer ───────────────────────────────────────────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS study_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            start_time TEXT NOT NULL,
+            end_time TEXT,
+            duration_seconds INTEGER,
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS study_groups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            group_name TEXT NOT NULL,
+            invite_code TEXT UNIQUE NOT NULL,
+            created_by TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS study_group_members (
+            group_id INTEGER NOT NULL,
+            user_id TEXT NOT NULL,
+            joined_at TEXT DEFAULT (datetime('now')),
+            PRIMARY KEY (group_id, user_id)
+        )
+    """)
+
+    # ── study plan (SM-2 cards) ───────────────────────────────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS study_cards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            module_code TEXT NOT NULL,
+            topic TEXT NOT NULL,
+            exam_date TEXT NOT NULL,
+            next_review_date TEXT NOT NULL,
+            interval_days INTEGER DEFAULT 1,
+            easiness_factor REAL DEFAULT 2.5,
+            repetitions INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+    """)
+
     conn.commit()
     conn.close()
 
+
 def get_connection():
-    return sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+# ── original module cache helpers ─────────────────────────────────────────────
 
 def get_cached_module(module_code: str, conn: sqlite3.Connection):
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM module_scores WHERE module_code = ?
-    """, (module_code.upper(),))
-
-    row = cursor.fetchone()
+    row = conn.execute(
+        "SELECT * FROM module_scores WHERE module_code = ?",
+        (module_code.upper(),)
+    ).fetchone()
     if row is None:
         return None
+    return dict(row)
 
-    return {
-        "module_code": row[0],
-        "title": row[1],
-        "description": row[2],
-        "module_credits": row[3],
-        "department": row[4],
-        "difficulty_score": row[5],
-        "recommend_score": row[6],
-        "top_positive_comment_message": row[7],
-        "top_positive_comment_likes": row[8],
-        "top_neutral_comment_message": row[9],
-        "top_neutral_comment_likes": row[10],
-        "top_negative_comment_message": row[11],
-        "top_negative_comment_likes": row[12],
-        "comment_count": row[13],
-        "expected_gpa": row[14],
-        "actual_gpa": row[15]
-    }
 
-def save_module_data(
-    module_code: str,
-    title: str,
-    description: str,
-    module_credits: int,
-    department: str,
-    difficulty_score: float,
-    recommend_score: float,
-    top_positive_comment: dict,
-    top_neutral_comment: dict,
-    top_negative_comment: dict,
-    comment_count: int,
-    expected_gpa: float,
-    actual_gpa: float,
-    conn: sqlite3.Connection
-):
+def save_module_data(module_code, title, description, module_credits, department,
+                     difficulty_score, recommend_score,
+                     top_positive_comment, top_neutral_comment, top_negative_comment,
+                     comment_count, expected_gpa, actual_gpa, conn):
     conn.execute("""
         INSERT OR REPLACE INTO module_scores
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
-        module_code,
-        title,
-        description,
-        module_credits,
-        department,
-        difficulty_score,
-        recommend_score,
-        top_positive_comment["message"],
-        top_positive_comment["likes"],
-        top_neutral_comment["message"],
-        top_neutral_comment["likes"],
-        top_negative_comment["message"],
-        top_negative_comment["likes"],
-        comment_count,
-        expected_gpa,
-        actual_gpa
+        module_code, title, description, module_credits, department,
+        difficulty_score, recommend_score,
+        top_positive_comment["message"], top_positive_comment["likes"],
+        top_neutral_comment["message"],  top_neutral_comment["likes"],
+        top_negative_comment["message"], top_negative_comment["likes"],
+        comment_count, expected_gpa, actual_gpa,
     ))
     conn.commit()
+
+
+# ── users ─────────────────────────────────────────────────────────────────────
+
+def create_user(user_id: str, display_name: str, faculty: str,
+                year_of_study: int, course: str, conn: sqlite3.Connection):
+    conn.execute("""
+        INSERT OR IGNORE INTO users (user_id, display_name, faculty, year_of_study, course)
+        VALUES (?, ?, ?, ?, ?)
+    """, (user_id, display_name, faculty, year_of_study, course))
+    conn.commit()
+
+
+def get_user(user_id: str, conn: sqlite3.Connection):
+    row = conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def update_user(user_id: str, display_name: str, faculty: str,
+                year_of_study: int, course: str, conn: sqlite3.Connection):
+    conn.execute("""
+        UPDATE users SET display_name=?, faculty=?, year_of_study=?, course=?
+        WHERE user_id=?
+    """, (display_name, faculty, year_of_study, course, user_id))
+    conn.commit()
+
+
+# ── timetable ─────────────────────────────────────────────────────────────────
+
+def upsert_timetable_slot(user_id, module_code, lesson_type, class_no, sem, conn):
+    conn.execute("""
+        INSERT INTO timetable_slots (user_id, module_code, lesson_type, class_no, sem)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, module_code, lesson_type, sem)
+        DO UPDATE SET class_no = excluded.class_no
+    """, (user_id, module_code.upper(), lesson_type, class_no, sem))
+    conn.commit()
+
+
+def delete_timetable_module(user_id, module_code, sem, conn):
+    conn.execute("""
+        DELETE FROM timetable_slots
+        WHERE user_id=? AND module_code=? AND sem=?
+    """, (user_id, module_code.upper(), sem))
+    conn.commit()
+
+
+def get_user_timetable(user_id, sem, conn):
+    rows = conn.execute("""
+        SELECT module_code, lesson_type, class_no
+        FROM timetable_slots
+        WHERE user_id=? AND sem=?
+    """, (user_id, sem)).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── study timer ───────────────────────────────────────────────────────────────
+
+def create_session(user_id, start_time, conn):
+    cur = conn.execute(
+        "INSERT INTO study_sessions (user_id, start_time) VALUES (?, ?)",
+        (user_id, start_time)
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def complete_session(session_id, end_time, duration_seconds, conn):
+    conn.execute("""
+        UPDATE study_sessions SET end_time=?, duration_seconds=?
+        WHERE id=?
+    """, (end_time, duration_seconds, session_id))
+    conn.commit()
+
+
+def get_user_timer_stats(user_id, conn):
+    today = conn.execute("""
+        SELECT COALESCE(SUM(duration_seconds), 0)
+        FROM study_sessions
+        WHERE user_id=? AND date(start_time)=date('now') AND duration_seconds IS NOT NULL
+    """, (user_id,)).fetchone()[0]
+
+    week = conn.execute("""
+        SELECT COALESCE(SUM(duration_seconds), 0)
+        FROM study_sessions
+        WHERE user_id=? AND date(start_time)>=date('now','-6 days') AND duration_seconds IS NOT NULL
+    """, (user_id,)).fetchone()[0]
+
+    return {"today_seconds": today, "week_seconds": week}
+
+
+def get_leaderboard(faculty, conn, limit=10):
+    if faculty:
+        rows = conn.execute("""
+            SELECT u.user_id, u.display_name, u.faculty, u.year_of_study, u.course,
+                   COALESCE(SUM(s.duration_seconds), 0) AS week_seconds
+            FROM users u
+            LEFT JOIN study_sessions s
+              ON u.user_id=s.user_id
+              AND date(s.start_time)>=date('now','-6 days')
+              AND s.duration_seconds IS NOT NULL
+            WHERE u.faculty=?
+            GROUP BY u.user_id
+            ORDER BY week_seconds DESC
+            LIMIT ?
+        """, (faculty, limit)).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT u.user_id, u.display_name, u.faculty, u.year_of_study, u.course,
+                   COALESCE(SUM(s.duration_seconds), 0) AS week_seconds
+            FROM users u
+            LEFT JOIN study_sessions s
+              ON u.user_id=s.user_id
+              AND date(s.start_time)>=date('now','-6 days')
+              AND s.duration_seconds IS NOT NULL
+            GROUP BY u.user_id
+            ORDER BY week_seconds DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── study groups ──────────────────────────────────────────────────────────────
+
+def create_group(group_name, invite_code, created_by, conn):
+    cur = conn.execute(
+        "INSERT INTO study_groups (group_name, invite_code, created_by) VALUES (?, ?, ?)",
+        (group_name, invite_code, created_by)
+    )
+    conn.execute(
+        "INSERT INTO study_group_members (group_id, user_id) VALUES (?, ?)",
+        (cur.lastrowid, created_by)
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_group_by_code(invite_code, conn):
+    row = conn.execute(
+        "SELECT * FROM study_groups WHERE invite_code=?", (invite_code,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def join_group(group_id, user_id, conn):
+    conn.execute("""
+        INSERT OR IGNORE INTO study_group_members (group_id, user_id) VALUES (?, ?)
+    """, (group_id, user_id))
+    conn.commit()
+
+
+def get_group_leaderboard(group_id, conn):
+    rows = conn.execute("""
+        SELECT u.user_id, u.display_name,
+               COALESCE(SUM(s.duration_seconds), 0) AS week_seconds
+        FROM study_group_members m
+        JOIN users u ON m.user_id=u.user_id
+        LEFT JOIN study_sessions s
+          ON u.user_id=s.user_id
+          AND date(s.start_time)>=date('now','-6 days')
+          AND s.duration_seconds IS NOT NULL
+        WHERE m.group_id=?
+        GROUP BY u.user_id
+        ORDER BY week_seconds DESC
+    """, (group_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── study plan ────────────────────────────────────────────────────────────────
+
+def create_study_card(user_id, module_code, topic, exam_date,
+                      next_review_date, conn):
+    cur = conn.execute("""
+        INSERT INTO study_cards
+          (user_id, module_code, topic, exam_date, next_review_date)
+        VALUES (?, ?, ?, ?, ?)
+    """, (user_id, module_code.upper(), topic, exam_date, next_review_date))
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_due_cards(user_id, today_str, conn):
+    rows = conn.execute("""
+        SELECT * FROM study_cards
+        WHERE user_id=? AND next_review_date<=?
+        ORDER BY next_review_date ASC
+    """, (user_id, today_str)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_upcoming_cards(user_id, conn):
+    rows = conn.execute("""
+        SELECT * FROM study_cards
+        WHERE user_id=?
+        ORDER BY next_review_date ASC
+    """, (user_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def update_study_card(card_id, interval_days, easiness_factor,
+                      repetitions, next_review_date, conn):
+    conn.execute("""
+        UPDATE study_cards
+        SET interval_days=?, easiness_factor=?, repetitions=?, next_review_date=?
+        WHERE id=?
+    """, (interval_days, easiness_factor, repetitions, next_review_date, card_id))
+    conn.commit()
+
+
+def get_card(card_id, conn):
+    row = conn.execute(
+        "SELECT * FROM study_cards WHERE id=?", (card_id,)
+    ).fetchone()
+    return dict(row) if row else None

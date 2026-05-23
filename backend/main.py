@@ -1,13 +1,33 @@
+import re
 import nlp
 import database_access
 import api
 import sqlite3
 
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
+
+import timetable_routes
+import timer_routes
+import studyplan_routes
 
 database_access.init_db()
 
-app = FastAPI()
+app = FastAPI(title="NUSMods Helper API", version="0.2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(timetable_routes.router)
+app.include_router(timer_routes.router)
+app.include_router(studyplan_routes.router)
+
+MODULE_CODE_RE = re.compile(r'^[A-Z]{2,3}\d{4}[A-Z]{0,2}$')
 
 #function to always close connection after work is done
 def get_conn():
@@ -52,7 +72,10 @@ def return_formatter(module_code: str,
 @app.get("/course/{module_code}")
 def get_course(module_code: str, conn: sqlite3.Connection = Depends(get_conn)):
 
-    module_code = module_code.upper() 
+    module_code = module_code.upper()
+
+    if not MODULE_CODE_RE.match(module_code):
+        raise HTTPException(status_code=400, detail="Invalid module code format")
 
     cached = database_access.get_cached_module(module_code, conn)
 
@@ -277,13 +300,5 @@ def get_highest_recommend_courses(comment_count: int, conn: sqlite3.Connection =
 
 
 if __name__ == "__main__":
-
-    conn = database_access.get_connection()
-
-    try:
-        result = get_course("CS2040S", conn)
-
-        print(result)
-
-    finally:
-        conn.close()
+    import uvicorn
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

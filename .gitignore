@@ -1,0 +1,24 @@
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Database (don't commit the populated database)
+database/modules.db
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Node (for future frontend)
+node_modules/
+.next/
