@@ -22,9 +22,16 @@ const FEATURES = [
   {
     icon: '📅',
     title: 'Timetable Builder',
-    desc: 'Search any NUSMods module and drag-select your preferred tutorial and lab slots. Your timetable renders live on a full weekly grid.',
+    desc: 'Search any NUSMods module and pick your tutorial and lab slots. Auto-Generate finds the top 5 conflict-free timetables ranked by your preferences. Share a link with friends.',
     to: '/timetable',
     cta: 'Open Timetable',
+  },
+  {
+    icon: '🔍',
+    title: 'Module Analysis',
+    desc: 'Enter any module code to see NLP-powered difficulty ratings, recommendation scores, and GPA outcomes extracted from real student reviews on NUSMods.',
+    to: '/analysis',
+    cta: 'Analyse a Module',
   },
   {
     icon: '⏱',
@@ -36,7 +43,7 @@ const FEATURES = [
   {
     icon: '🧠',
     title: 'Study Plan (SM-2)',
-    desc: 'Enter your exam dates and topics. The SM-2 spaced-repetition algorithm schedules daily review cards so you retain everything by exam day.',
+    desc: 'Enter your exam dates and topics. The SM-2 spaced-repetition algorithm schedules daily review cards so you retain everything by exam day. Export to calendar.',
     to: '/studyplan',
     cta: 'Build My Plan',
   },
@@ -136,7 +143,7 @@ const s = {
   },
   heroTitle: { fontSize: 40, fontWeight: 800, lineHeight: 1.15, margin: 0 },
   heroCopy: { fontSize: 17, opacity: 0.85, maxWidth: 480, margin: 0 },
-  featureGrid: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginBottom: 40 },
+  featureGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginBottom: 40 },
   featureCard: { display: 'flex', flexDirection: 'column', gap: 10 },
   featureIcon: { fontSize: 36 },
   featureTitle: { fontWeight: 700, fontSize: 18 },

@@ -100,6 +100,11 @@ input:focus, select:focus, textarea:focus { border-color: var(--primary); }
   font-weight: 600;
 }
 
+/* spinner animation ──────────────────────────────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* module colours ─────────────────────────────────── */
 :root {
   --mc0: #3b82f6; --mc1: #10b981; --mc2: #f59e0b; --mc3: #8b5cf6;

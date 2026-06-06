@@ -103,6 +103,29 @@ def init_db():
         )
     """)
 
+    # ── timetable shares ──────────────────────────────────────────────────────
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS timetable_shares (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT UNIQUE NOT NULL,
+            user_id TEXT NOT NULL,
+            sem INTEGER NOT NULL,
+            module_codes_json TEXT NOT NULL,
+            selections_json TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    # ── streak columns (silently skip if already present) ─────────────────────
+    for col_sql in [
+        "ALTER TABLE users ADD COLUMN review_streak INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN last_review_date TEXT",
+    ]:
+        try:
+            conn.execute(col_sql)
+        except Exception:
+            pass
+
     conn.commit()
     conn.close()
 
@@ -355,3 +378,49 @@ def get_card(card_id, conn):
         "SELECT * FROM study_cards WHERE id=?", (card_id,)
     ).fetchone()
     return dict(row) if row else None
+
+
+# ── timetable shares ──────────────────────────────────────────────────────────
+
+def create_timetable_share(token: str, user_id: str, sem: int,
+                           module_codes_json: str, selections_json: str,
+                           conn: sqlite3.Connection):
+    conn.execute("""
+        INSERT INTO timetable_shares
+            (token, user_id, sem, module_codes_json, selections_json)
+        VALUES (?, ?, ?, ?, ?)
+    """, (token, user_id, sem, module_codes_json, selections_json))
+    conn.commit()
+
+
+def get_timetable_share(token: str, conn: sqlite3.Connection):
+    row = conn.execute(
+        "SELECT * FROM timetable_shares WHERE token=?", (token,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+# ── study card deletion ───────────────────────────────────────────────────────
+
+def delete_study_card(card_id: int, conn: sqlite3.Connection):
+    conn.execute("DELETE FROM study_cards WHERE id=?", (card_id,))
+    conn.commit()
+
+
+def delete_exam_cards(user_id: str, module_code: str, conn: sqlite3.Connection):
+    conn.execute(
+        "DELETE FROM study_cards WHERE user_id=? AND module_code=?",
+        (user_id, module_code),
+    )
+    conn.commit()
+
+
+# ── streak tracking ───────────────────────────────────────────────────────────
+
+def update_user_streak(user_id: str, streak: int, last_date: str,
+                       conn: sqlite3.Connection):
+    conn.execute("""
+        UPDATE users SET review_streak=?, last_review_date=?
+        WHERE user_id=?
+    """, (streak, last_date, user_id))
+    conn.commit()

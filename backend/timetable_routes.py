@@ -1,8 +1,12 @@
+import json
+import secrets
 import sqlite3
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 import api
 import database_access
+import timetable_generator
 
 router = APIRouter(tags=["timetable"])
 
@@ -20,6 +24,19 @@ class SlotSelection(BaseModel):
     lesson_type: str
     class_no: str
     sem: int = 1
+
+
+class GenerateRequest(BaseModel):
+    module_codes: List[str]
+    sem: int = 1
+    preferences: dict = {}
+    top_n: int = 5
+
+
+class ShareRequest(BaseModel):
+    user_id: str
+    sem: int = 1
+    module_codes: Optional[List[str]] = None
 
 
 # ── module search ──────────────────────────────────────────────────────────────
@@ -101,3 +118,78 @@ def remove_module(user_id: str, module_code: str, sem: int = 1,
                   conn: sqlite3.Connection = Depends(get_conn)):
     database_access.delete_timetable_module(user_id, module_code.upper(), sem, conn)
     return {"ok": True}
+
+
+# ── timetable generation ──────────────────────────────────────────────────────
+
+@router.post("/timetable/generate")
+def generate_timetable(body: GenerateRequest):
+    """Run backtracking to find the top N conflict-free timetables."""
+    if not body.module_codes:
+        raise HTTPException(400, "No module codes provided")
+    codes = [c.upper() for c in body.module_codes]
+    try:
+        results = timetable_generator.generate_timetables(
+            codes, body.sem, body.preferences, min(body.top_n, 10)
+        )
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+    return {"count": len(results), "timetables": results}
+
+
+# ── timetable sharing ─────────────────────────────────────────────────────────
+
+@router.post("/timetable/share")
+def share_timetable(body: ShareRequest,
+                    conn: sqlite3.Connection = Depends(get_conn)):
+    """Snapshot the user's current selections and return a shareable token."""
+    all_selections = database_access.get_user_timetable(body.user_id, body.sem, conn)
+
+    if body.module_codes:
+        codes = [c.upper() for c in body.module_codes]
+        filtered = [s for s in all_selections if s["module_code"] in codes]
+    else:
+        filtered = all_selections
+        codes = list({s["module_code"] for s in all_selections})
+
+    token = secrets.token_urlsafe(9)
+    database_access.create_timetable_share(
+        token, body.user_id, body.sem,
+        json.dumps(codes), json.dumps(filtered), conn,
+    )
+    return {"token": token, "url": f"/shared/{token}"}
+
+
+@router.get("/timetable/shared/{token}")
+def get_shared_timetable(token: str,
+                         conn: sqlite3.Connection = Depends(get_conn)):
+    """Return a previously shared timetable snapshot (read-only)."""
+    share = database_access.get_timetable_share(token, conn)
+    if not share:
+        raise HTTPException(404, "Share link not found")
+
+    module_codes = json.loads(share["module_codes_json"])
+    selections   = json.loads(share["selections_json"])
+    sem          = share["sem"]
+
+    selected_map: dict = {}
+    for s in selections:
+        selected_map.setdefault(s["module_code"], {})[s["lesson_type"]] = s["class_no"]
+
+    rendered_slots = []
+    for mc in module_codes:
+        slots = api.fetch_module_slots(mc, sem) or []
+        lesson_map = selected_map.get(mc, {})
+        for slot in slots:
+            chosen = lesson_map.get(slot["lessonType"])
+            if chosen and slot["classNo"] == chosen:
+                rendered_slots.append({**slot, "moduleCode": mc})
+
+    return {
+        "token": token,
+        "sem": sem,
+        "module_codes": module_codes,
+        "selections": selections,
+        "rendered_slots": rendered_slots,
+        "created_at": share["created_at"],
+    }

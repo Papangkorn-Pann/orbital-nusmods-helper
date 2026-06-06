@@ -5,6 +5,8 @@ import Home from './pages/Home.jsx'
 import Timetable from './pages/Timetable.jsx'
 import Timer from './pages/Timer.jsx'
 import StudyPlan from './pages/StudyPlan.jsx'
+import ModuleAnalysis from './pages/ModuleAnalysis.jsx'
+import SharedTimetable from './pages/SharedTimetable.jsx'
 import { createUser } from './api.js'
 
 function getUserId() {
@@ -27,10 +29,12 @@ export default function App() {
     <>
       <Navbar />
       <Routes>
-        <Route path="/"          element={<Home />} />
-        <Route path="/timetable" element={<Timetable />} />
-        <Route path="/timer"     element={<Timer />} />
-        <Route path="/studyplan" element={<StudyPlan />} />
+        <Route path="/"               element={<Home />} />
+        <Route path="/timetable"      element={<Timetable />} />
+        <Route path="/timer"          element={<Timer />} />
+        <Route path="/studyplan"      element={<StudyPlan />} />
+        <Route path="/analysis"       element={<ModuleAnalysis />} />
+        <Route path="/shared/:token"  element={<SharedTimetable />} />
       </Routes>
     </>
   )

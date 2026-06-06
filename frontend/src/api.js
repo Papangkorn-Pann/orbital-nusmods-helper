@@ -70,6 +70,12 @@ export const joinGroup = (inviteCode, userId) =>
   post(`/groups/${inviteCode}/join`, { user_id: userId })
 export const getGroup = (inviteCode) => get(`/groups/${inviteCode}`)
 
+// ── timetable generation & sharing ───────────────────────────────────────────
+
+export const generateTimetable   = (body)  => post('/timetable/generate', body)
+export const shareTimetable      = (body)  => post('/timetable/share', body)
+export const getSharedTimetable  = (token) => get(`/timetable/shared/${token}`)
+
 // ── study plan ────────────────────────────────────────────────────────────────
 
 export const addExam = (body) => post('/studyplan/exams', body)
@@ -77,3 +83,15 @@ export const getTodayCards = (userId) => get(`/studyplan/${userId}/today`)
 export const reviewCard = (cardId, quality) =>
   put(`/studyplan/cards/${cardId}/review`, { quality })
 export const getSchedule = (userId) => get(`/studyplan/${userId}/schedule`)
+export const deleteCard  = (cardId) => del(`/studyplan/cards/${cardId}`)
+export const deleteExam  = (userId, moduleCode) =>
+  del(`/studyplan/${userId}/exams/${moduleCode}`)
+
+export function exportStudyPlan(userId) {
+  const a = document.createElement('a')
+  a.href = `${BASE}/studyplan/${userId}/export.ics`
+  a.download = 'study-plan.ics'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
