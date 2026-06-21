@@ -3,16 +3,16 @@ import { Link } from 'react-router-dom'
 
 // All CourseReg rounds with parseable start dates
 const ROUND_DATES = [
-  { label: 'Sem 1 Round 0',    date: new Date('2025-07-07') },
-  { label: 'Sem 1 Round 1A',   date: new Date('2025-07-14') },
-  { label: 'Sem 1 Round 1B',   date: new Date('2025-07-21') },
-  { label: 'Sem 1 Round 2',    date: new Date('2025-07-28') },
-  { label: 'Sem 1 Add/Drop',   date: new Date('2025-08-11') },
-  { label: 'Sem 2 Round 0',    date: new Date('2025-11-10') },
-  { label: 'Sem 2 Round 1A',   date: new Date('2025-11-17') },
-  { label: 'Sem 2 Round 1B',   date: new Date('2025-11-24') },
-  { label: 'Sem 2 Round 2',    date: new Date('2025-12-01') },
-  { label: 'Sem 2 Add/Drop',   date: new Date('2026-01-12') },
+  { label: 'Sem 1 Round 0',    date: new Date('2026-07-06') },
+  { label: 'Sem 1 Round 1A',   date: new Date('2026-07-13') },
+  { label: 'Sem 1 Round 1B',   date: new Date('2026-07-20') },
+  { label: 'Sem 1 Round 2',    date: new Date('2026-07-27') },
+  { label: 'Sem 1 Add/Drop',   date: new Date('2026-08-10') },
+  { label: 'Sem 2 Round 0',    date: new Date('2026-11-09') },
+  { label: 'Sem 2 Round 1A',   date: new Date('2026-11-16') },
+  { label: 'Sem 2 Round 1B',   date: new Date('2026-11-23') },
+  { label: 'Sem 2 Round 2',    date: new Date('2026-11-30') },
+  { label: 'Sem 2 Add/Drop',   date: new Date('2027-01-11') },
 ]
 
 function CourseRegCountdown() {
@@ -34,7 +34,7 @@ function CourseRegCountdown() {
   if (!info) return null
   if (info.done) return (
     <div style={cd.wrap}>
-      <span style={cd.label}>AY2025/2026 CourseReg</span>
+      <span style={cd.label}>AY2026/2027 CourseReg</span>
       <span style={cd.val}>All rounds complete</span>
     </div>
   )
@@ -48,21 +48,21 @@ function CourseRegCountdown() {
   )
 }
 
-// AY2025/2026 CourseReg rounds (Semester 1 & 2)
+// AY2026/2027 CourseReg rounds (Semester 1 & 2)
 const ROUNDS = {
   sem1: [
-    { round: 'Round 0',     dates: '7 – 11 Jul 2025',    who: 'Students with special circumstances / LOA returns' },
-    { round: 'Round 1A',    dates: '14 – 18 Jul 2025',   who: 'Final-year students & those with the most AUs remaining' },
-    { round: 'Round 1B',    dates: '21 – 25 Jul 2025',   who: 'All eligible undergraduate students' },
-    { round: 'Round 2',     dates: '28 Jul – 1 Aug 2025',who: 'Remaining vacancies open to all' },
-    { round: 'Add / Drop',  dates: '11 – 29 Aug 2025',   who: 'First two weeks of semester — swap without penalty' },
+    { round: 'Round 0',     dates: '6 – 10 Jul 2026',    who: 'Students with special circumstances / LOA returns' },
+    { round: 'Round 1A',    dates: '13 – 17 Jul 2026',   who: 'Final-year students & those with the most AUs remaining' },
+    { round: 'Round 1B',    dates: '20 – 24 Jul 2026',   who: 'All eligible undergraduate students' },
+    { round: 'Round 2',     dates: '27 Jul – 1 Aug 2026',who: 'Remaining vacancies open to all' },
+    { round: 'Add / Drop',  dates: '10 – 28 Aug 2026',   who: 'First two weeks of semester — swap without penalty' },
   ],
   sem2: [
-    { round: 'Round 0',     dates: '10 – 14 Nov 2025',   who: 'Students with special circumstances / LOA returns' },
-    { round: 'Round 1A',    dates: '17 – 21 Nov 2025',   who: 'Final-year students & those with the most AUs remaining' },
-    { round: 'Round 1B',    dates: '24 – 28 Nov 2025',   who: 'All eligible undergraduate students' },
-    { round: 'Round 2',     dates: '1 – 5 Dec 2025',     who: 'Remaining vacancies open to all' },
-    { round: 'Add / Drop',  dates: '12 – 30 Jan 2026',   who: 'First two weeks of semester — swap without penalty' },
+    { round: 'Round 0',     dates: '9 – 13 Nov 2026',    who: 'Students with special circumstances / LOA returns' },
+    { round: 'Round 1A',    dates: '16 – 20 Nov 2026',   who: 'Final-year students & those with the most AUs remaining' },
+    { round: 'Round 1B',    dates: '23 – 27 Nov 2026',   who: 'All eligible undergraduate students' },
+    { round: 'Round 2',     dates: '30 Nov – 4 Dec 2026',who: 'Remaining vacancies open to all' },
+    { round: 'Add / Drop',  dates: '11 – 29 Jan 2027',   who: 'First two weeks of semester — swap without penalty' },
   ],
 }
 
@@ -72,6 +72,12 @@ const FEATURES = [
     desc: 'Search any NUSMods module and pick your tutorial and lab slots. Auto-generate finds the top 5 conflict-free timetables ranked by your preferences. Share a link with friends.',
     to: '/timetable',
     cta: 'Open timetable',
+  },
+  {
+    title: 'CourseReg Advisor',
+    desc: 'See estimated slot competition and bid-success probabilities for every tutorial/lab slot. Powered by slot capacity, timing desirability, and live demand from platform users.',
+    to: '/coursereg',
+    cta: 'Plan my bids',
   },
   {
     title: 'Module Analysis',
@@ -122,7 +128,7 @@ export default function Home() {
     <div className="page">
       {/* Hero */}
       <div style={s.hero}>
-        <p style={s.heroEyebrow}>NUSMods Helper · AY2025/2026</p>
+        <p style={s.heroEyebrow}>NUSMods Helper · AY2026/2027</p>
         <h1 style={s.heroTitle}>Plan smarter.<br />Study better.</h1>
         <p style={s.heroCopy}>
           An all-in-one companion for NUS students — from CourseReg day to final exams.
@@ -152,7 +158,7 @@ export default function Home() {
 
       {/* CourseReg schedule */}
       <div style={s.section}>
-        <h2 style={s.sectionTitle}>AY2025/2026 CourseReg Schedule</h2>
+        <h2 style={s.sectionTitle}>AY2026/2027 CourseReg Schedule</h2>
         <p style={s.sectionSub}>
           NUS uses a priority-based round system. Use the Timetable Builder to plan your bids before each round opens.
         </p>

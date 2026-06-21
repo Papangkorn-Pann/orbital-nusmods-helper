@@ -57,6 +57,59 @@ function GenerateModal({ sem, moduleCodes, prefs, setPrefs, generating, genResul
           <PrefSlider label="Minimize Travel"  value={prefs.minimize_travel}  onChange={v => setPrefs(p => ({ ...p, minimize_travel: v }))} />
         </div>
 
+        {/* Day preference */}
+        <div style={{ marginBottom: 16 }}>
+          <p style={ms.secTitle}>Preferred days (optional)</p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+            {['Monday','Tuesday','Wednesday','Thursday','Friday'].map(day => {
+              const checked = (prefs.preferred_days || []).includes(day)
+              return (
+                <label
+                  key={day}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    cursor: 'pointer', fontSize: 13,
+                    padding: '4px 10px', borderRadius: 5,
+                    border: `1px solid ${checked ? '#2563eb' : 'var(--border)'}`,
+                    background: checked ? '#eff6ff' : 'transparent',
+                    color: checked ? '#2563eb' : 'var(--text-muted)',
+                    userSelect: 'none',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={e => {
+                      setPrefs(p => {
+                        const prev = p.preferred_days || []
+                        const next = e.target.checked
+                          ? [...prev, day]
+                          : prev.filter(d => d !== day)
+                        return {
+                          ...p,
+                          preferred_days: next,
+                          day_preference: next.length > 0
+                            ? (p.day_preference > 0 ? p.day_preference : 0.3)
+                            : 0.0,
+                        }
+                      })
+                    }}
+                    style={{ width: 'auto', cursor: 'pointer', marginRight: 2 }}
+                  />
+                  {day.slice(0, 3)}
+                </label>
+              )
+            })}
+          </div>
+          {(prefs.preferred_days || []).length > 0 && (
+            <PrefSlider
+              label="Day Pref Weight"
+              value={prefs.day_preference || 0.0}
+              onChange={v => setPrefs(p => ({ ...p, day_preference: v }))}
+            />
+          )}
+        </div>
+
         <button
           className="btn-primary"
           onClick={onGenerate}
@@ -177,6 +230,7 @@ export default function Timetable() {
   const [prefs,        setPrefs]        = useState({
     latest_start: 0.2, earliest_end: 0.2, lunch_break: 0.2,
     compact_days: 0.2, minimal_gaps: 0.2, minimize_travel: 0.0,
+    day_preference: 0.0, preferred_days: [],
   })
   const [generating,  setGenerating]  = useState(false)
   const [genResults,  setGenResults]  = useState(null)

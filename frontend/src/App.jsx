@@ -8,6 +8,7 @@ import StudyPlan from './pages/StudyPlan.jsx'
 import ModuleAnalysis from './pages/ModuleAnalysis.jsx'
 import SharedTimetable from './pages/SharedTimetable.jsx'
 import Compare from './pages/Compare.jsx'
+import CourseReg from './pages/CourseReg.jsx'
 import { createUser } from './api.js'
 
 function getUserId() {
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/analysis"       element={<ModuleAnalysis />} />
         <Route path="/shared/:token"  element={<SharedTimetable />} />
         <Route path="/compare"        element={<Compare />} />
+        <Route path="/coursereg"      element={<CourseReg />} />
       </Routes>
     </>
   )

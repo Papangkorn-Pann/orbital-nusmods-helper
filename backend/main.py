@@ -6,8 +6,11 @@ import database_access
 import api
 import sqlite3
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # Serialize NLP inference: BART is CPU-heavy and can OOM under concurrent load.
 # Cached lookups bypass this lock entirely; only fresh analyses are serialised.
@@ -16,10 +19,14 @@ _nlp_lock = threading.Semaphore(1)
 import timetable_routes
 import timer_routes
 import studyplan_routes
+import coursereg_routes
 
 database_access.init_db()
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(title="NUSMods Helper API", version="0.2.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,6 +39,7 @@ app.add_middleware(
 app.include_router(timetable_routes.router)
 app.include_router(timer_routes.router)
 app.include_router(studyplan_routes.router)
+app.include_router(coursereg_routes.router)
 
 MODULE_CODE_RE = re.compile(r'^[A-Z]{2,3}\d{4}[A-Z]{0,2}$')
 
@@ -52,6 +60,7 @@ def return_formatter(module_code: str,
                      actual_gpa: float,
                      summary: str,
                      grade_thresholds: dict,
+                     grade_pairs: list,
                      workload: list,
                      prerequisite: str,
                      preclusion: str):
@@ -68,13 +77,15 @@ def return_formatter(module_code: str,
         "actual_gpa": actual_gpa,
         "summary": summary,
         "grade_thresholds": grade_thresholds,
+        "grade_pairs": grade_pairs,
         "workload": workload,
         "prerequisite": prerequisite,
         "preclusion": preclusion,
     }
 
 @app.get("/course/{module_code}")
-def get_course(module_code: str, conn: sqlite3.Connection = Depends(get_conn)):
+@limiter.limit("10/minute")
+def get_course(request: Request, module_code: str, conn: sqlite3.Connection = Depends(get_conn)):
 
     module_code = module_code.upper()
 
@@ -84,7 +95,7 @@ def get_course(module_code: str, conn: sqlite3.Connection = Depends(get_conn)):
     cached = database_access.get_cached_module(module_code, conn)
 
     # Only use cache if it already has the summary field (new schema)
-    if cached and cached.get("analysis_version", 0) >= 1:
+    if cached and cached.get("analysis_version", 0) >= 2:
         print("Using cached result...")
         return {
             "module": module_code,
@@ -99,6 +110,7 @@ def get_course(module_code: str, conn: sqlite3.Connection = Depends(get_conn)):
             "actual_gpa": cached["actual_gpa"],
             "summary": cached["summary"],
             "grade_thresholds": json.loads(cached["grade_thresholds_json"]) if cached.get("grade_thresholds_json") else None,
+            "grade_pairs": json.loads(cached["grade_pairs_json"]) if cached.get("grade_pairs_json") else None,
             "workload": json.loads(cached["workload_json"]) if cached.get("workload_json") else None,
             "prerequisite": cached.get("prerequisite"),
             "preclusion": cached.get("preclusion"),
@@ -118,7 +130,7 @@ def get_course(module_code: str, conn: sqlite3.Connection = Depends(get_conn)):
     try:
         # Re-check cache now that we hold the lock (another request may have just populated it)
         cached = database_access.get_cached_module(module_code, conn)
-        if cached and cached.get("analysis_version", 0) >= 1:
+        if cached and cached.get("analysis_version", 0) >= 2:
             return {
                 "module": module_code,
                 "title": cached["title"],
@@ -132,6 +144,7 @@ def get_course(module_code: str, conn: sqlite3.Connection = Depends(get_conn)):
                 "actual_gpa": cached["actual_gpa"],
                 "summary": cached["summary"],
                 "grade_thresholds": json.loads(cached["grade_thresholds_json"]) if cached.get("grade_thresholds_json") else None,
+                "grade_pairs": json.loads(cached["grade_pairs_json"]) if cached.get("grade_pairs_json") else None,
                 "workload": json.loads(cached["workload_json"]) if cached.get("workload_json") else None,
                 "prerequisite": cached.get("prerequisite"),
                 "preclusion": cached.get("preclusion"),
@@ -180,20 +193,24 @@ def get_course(module_code: str, conn: sqlite3.Connection = Depends(get_conn)):
         #--------------------------------------------------------------------------------------
         #DIFFICULTY AND RECOMMENDATION ANALYSIS
         #--------------------------------------------------------------------------------------
+        # Difficulty: BART zero-shot on top 50 most-liked comments → weighted avg 1–5 scale
         top_comments = sorted(comments, key=lambda c: c["likes"], reverse=True)
-        top_comments = top_comments[:30]  # Only analyze top 30 comments because BART is computationally expensive
+        top_comments = top_comments[:50]
         if top_comments:
-            difficulty_score = 0.0
-            recommend_score = 0.0
+            difficulty_total = 0.0
             for comment in top_comments:
                 result = nlp.analyze_diff_recc(comment)
-                difficulty_score += float(result["difficulty_score"])
-                recommend_score += float(result["recommend_score"])
-            difficulty_score /= len(top_comments)
-            recommend_score /= len(top_comments)
+                difficulty_total += float(result["difficulty_score"])
+            difficulty_score = difficulty_total / len(top_comments)
         else:
             difficulty_score = None
-            recommend_score = None
+
+        # Recommendation: % of ALL comments with positive VADER sentiment
+        # (sentiment already computed above for every comment)
+        positive_count = sum(1 for c in comments if c.get("sentiment") == "positive")
+        negative_count = sum(1 for c in comments if c.get("sentiment") == "negative")
+        rated_count = positive_count + negative_count
+        recommend_score = positive_count / rated_count if rated_count > 0 else None
 
         #---------------------------------------------------------------------------------------
         # GRADE ANALYSIS
@@ -217,11 +234,21 @@ def get_course(module_code: str, conn: sqlite3.Connection = Depends(get_conn)):
         actual_gpa = total_actual_gpa / total_actual_gpa_count if total_actual_gpa_count > 0 else None
 
         #---------------------------------------------------------------------------------------
-        # SUMMARY, GRADE THRESHOLDS, WORKLOAD, PREREQUISITES
+        # SUMMARY, GRADE THRESHOLDS, GRADE PAIRS, WORKLOAD, PREREQUISITES
         #---------------------------------------------------------------------------------------
-        summary = nlp.extractive_summarize(cleaned_texts) if cleaned_texts else None
+        top_cleaned = [c["_cleaned"] for c in top_comments if c.get("_cleaned")]
+        summary = nlp.ai_summarize(top_cleaned) if top_cleaned else None
         grade_thresholds = nlp.extract_grade_thresholds(cleaned_texts) if cleaned_texts else None
         grade_thresholds_json = json.dumps(grade_thresholds) if grade_thresholds else None
+
+        # Per-person expected vs actual grade pairs
+        grade_pairs = []
+        for comment in comments:
+            exp = nlp.extract_expected_grade_letter(comment)
+            act = nlp.extract_actual_grade_letter(comment)
+            if exp or act:
+                grade_pairs.append({"expected": exp, "actual": act})
+        grade_pairs_json = json.dumps(grade_pairs) if grade_pairs else None
 
         workload     = course_data.get("workload")
         prerequisite = course_data.get("prerequisite")
@@ -247,6 +274,7 @@ def get_course(module_code: str, conn: sqlite3.Connection = Depends(get_conn)):
             actual_gpa,
             summary,
             grade_thresholds_json,
+            grade_pairs_json,
             workload_json,
             prerequisite,
             preclusion,
@@ -257,7 +285,7 @@ def get_course(module_code: str, conn: sqlite3.Connection = Depends(get_conn)):
             module_code, course_data,
             difficulty_score, recommend_score,
             len(comments), expected_gpa, actual_gpa,
-            summary, grade_thresholds,
+            summary, grade_thresholds, grade_pairs,
             workload, prerequisite, preclusion,
         )
     finally:

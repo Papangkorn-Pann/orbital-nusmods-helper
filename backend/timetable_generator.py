@@ -2,16 +2,18 @@
 Backtracking timetable generator.
 
 Explores all conflict-free slot combinations for a set of modules and returns
-the top N results ranked by a weighted 6-dimensional score:
+the top N results ranked by a weighted 7-dimensional score:
   • latest_start     – prefer classes that begin late
   • earliest_end     – prefer classes that finish early
   • lunch_break      – keep 12:00–14:00 free each day
   • compact_days     – fewer days with any classes
   • minimal_gaps     – minimise idle time between first and last class each day
   • minimize_travel  – avoid back-to-back classes in distant campus zones
+  • peer_avoidance   – prefer slots chosen by fewer peers (easier to get in CourseReg)
 """
 
 import heapq
+import random
 import time
 from typing import List, Dict, Any
 import api
@@ -70,7 +72,7 @@ def _to_min(t: str) -> int:
     return int(t[:2]) * 60 + int(t[2:])
 
 
-def _score(flat_slots: List[Dict], prefs: Dict) -> float:
+def _score(flat_slots: List[Dict], prefs: Dict, slot_demand: Dict = None) -> float:
     """Weighted preference score in [0, 1] for a complete slot assignment."""
     if not flat_slots:
         return 0.0
@@ -128,18 +130,41 @@ def _score(flat_slots: List[Dict], prefs: Dict) -> float:
                 travel_ok += 1
     travel_score = travel_ok / travel_pairs if travel_pairs else 1.0
 
+    # Day preference: fraction of school days that fall on a user-preferred day
+    preferred_days = set(prefs.get("preferred_days", []))
+    if preferred_days:
+        days_on_pref = sum(1 for d in days if d in preferred_days)
+        day_pref_score = days_on_pref / n
+        w_dp = prefs.get("day_preference", 0.0)
+    else:
+        day_pref_score = 1.0
+        w_dp = 0.0
+
+    # Peer avoidance: prefer slots selected by fewer peers (easier to get in CourseReg)
+    if slot_demand:
+        max_demand = max(slot_demand.values()) or 1
+        fractions = [
+            min(slot_demand.get(f"{s['moduleCode']}|{s['lessonType']}|{s['classNo']}", 0) / max_demand, 1.0)
+            for s in flat_slots
+        ]
+        peer_avoidance = 1.0 - (sum(fractions) / len(fractions))
+    else:
+        peer_avoidance = 1.0
+
     w_ls = prefs.get("latest_start",    0.2)
     w_ee = prefs.get("earliest_end",    0.2)
     w_lb = prefs.get("lunch_break",     0.2)
     w_cd = prefs.get("compact_days",    0.2)
     w_mg = prefs.get("minimal_gaps",    0.2)
     w_mt = prefs.get("minimize_travel", 0.0)
-    total_w = (w_ls + w_ee + w_lb + w_cd + w_mg + w_mt) or 1.0
+    w_pa = prefs.get("peer_avoidance",  0.0)
+    total_w = (w_ls + w_ee + w_lb + w_cd + w_mg + w_mt + w_dp + w_pa) or 1.0
 
     return round(
         (w_ls * latest_start + w_ee * earliest_end +
          w_lb * lunch + w_cd * compact + w_mg * gap_score +
-         w_mt * travel_score) / total_w,
+         w_mt * travel_score + w_dp * day_pref_score +
+         w_pa * peer_avoidance) / total_w,
         4,
     )
 
@@ -150,6 +175,7 @@ def generate_timetables(
     preferences: Dict,
     top_n: int = 5,
     timeout: float = 8.0,
+    slot_demand: Dict = None,
 ) -> List[Dict[str, Any]]:
     """
     Return up to top_n best timetable combinations (by weighted score).
@@ -172,7 +198,11 @@ def generate_timetables(
             cn = slot["classNo"]
             by_lt.setdefault(lt, {}).setdefault(cn, []).append(slot)
         for lt, by_class in sorted(by_lt.items()):
-            tasks.append((code.upper(), lt, by_class))
+            # Shuffle class options so that when multiple classes share the same
+            # timeslot pattern no single class number is always favoured in results.
+            items = list(by_class.items())
+            random.shuffle(items)
+            tasks.append((code.upper(), lt, items))
 
     if not tasks:
         return []
@@ -189,7 +219,7 @@ def generate_timetables(
             return
 
         if idx == len(tasks):
-            sc = _score(flat, preferences)
+            sc = _score(flat, preferences, slot_demand)
             entry = (sc, ctr[0], [dict(s) for s in sel], [dict(f) for f in flat])
             if len(heap) < top_n:
                 heapq.heappush(heap, entry)
@@ -199,7 +229,7 @@ def generate_timetables(
             return
 
         code, lt, by_class = tasks[idx]
-        for cn, cn_slots in by_class.items():
+        for cn, cn_slots in by_class:
             if time.time() > deadline:
                 return
 

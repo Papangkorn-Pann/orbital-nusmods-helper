@@ -2,12 +2,13 @@ import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 
 const links = [
-  { to: '/',          label: 'Home' },
-  { to: '/timetable', label: 'Timetable' },
-  { to: '/analysis',  label: 'Module Analysis' },
-  { to: '/compare',   label: 'Compare' },
-  { to: '/timer',     label: 'Study Timer' },
-  { to: '/studyplan', label: 'Study Plan' },
+  { to: '/',           label: 'Home' },
+  { to: '/timetable',  label: 'Timetable' },
+  { to: '/coursereg',  label: 'CourseReg' },
+  { to: '/analysis',   label: 'Module Analysis' },
+  { to: '/compare',    label: 'Compare' },
+  { to: '/timer',      label: 'Study Timer' },
+  { to: '/studyplan',  label: 'Study Plan' },
 ]
 
 export default function Navbar() {

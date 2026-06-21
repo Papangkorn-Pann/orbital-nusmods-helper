@@ -125,6 +125,7 @@ def init_db():
         "ALTER TABLE module_scores ADD COLUMN preclusion TEXT",
         # v1 = pipeline includes workload + prereq; 0 = legacy cached entry
         "ALTER TABLE module_scores ADD COLUMN analysis_version INTEGER DEFAULT 0",
+        "ALTER TABLE module_scores ADD COLUMN grade_pairs_json TEXT",
     ]:
         try:
             conn.execute(col_sql)
@@ -167,7 +168,7 @@ def save_module_data(module_code, title, description, module_credits, department
                      difficulty_score, recommend_score,
                      top_positive_comment, top_neutral_comment, top_negative_comment,
                      comment_count, expected_gpa, actual_gpa,
-                     summary, grade_thresholds_json,
+                     summary, grade_thresholds_json, grade_pairs_json,
                      workload_json, prerequisite, preclusion, conn):
     conn.execute("""
         INSERT OR REPLACE INTO module_scores
@@ -177,9 +178,9 @@ def save_module_data(module_code, title, description, module_credits, department
          top_neutral_comment_message,  top_neutral_comment_likes,
          top_negative_comment_message, top_negative_comment_likes,
          comment_count, expected_gpa, actual_gpa,
-         summary, grade_thresholds_json, workload_json, prerequisite, preclusion,
+         summary, grade_thresholds_json, grade_pairs_json, workload_json, prerequisite, preclusion,
          analysis_version)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2)
     """, (
         module_code, title, description, module_credits, department,
         difficulty_score, recommend_score,
@@ -187,7 +188,7 @@ def save_module_data(module_code, title, description, module_credits, department
         top_neutral_comment["message"],  top_neutral_comment["likes"],
         top_negative_comment["message"], top_negative_comment["likes"],
         comment_count, expected_gpa, actual_gpa,
-        summary, grade_thresholds_json, workload_json, prerequisite, preclusion,
+        summary, grade_thresholds_json, grade_pairs_json, workload_json, prerequisite, preclusion,
     ))
     conn.commit()
 

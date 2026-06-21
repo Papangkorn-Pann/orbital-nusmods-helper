@@ -22,6 +22,19 @@ function DifficultyGauge({ score }) {
   )
 }
 
+function gpaToLetter(gpa) {
+  if (gpa >= 5.0) return 'A'
+  if (gpa >= 4.5) return 'A-'
+  if (gpa >= 4.0) return 'B+'
+  if (gpa >= 3.5) return 'B'
+  if (gpa >= 3.0) return 'B-'
+  if (gpa >= 2.5) return 'C+'
+  if (gpa >= 2.0) return 'C'
+  if (gpa >= 1.5) return 'D+'
+  if (gpa >= 1.0) return 'D'
+  return 'F'
+}
+
 function RecommendGauge({ score }) {
   if (score == null) return <span style={{ color: '#94a3b8' }}>N/A</span>
   const pct   = score * 100
@@ -107,43 +120,6 @@ function AnalysisResult({ data }) {
         </div>
         {data.description && <p style={s.desc}>{data.description}</p>}
 
-        {/* Workload */}
-        {data.workload && (
-          <div style={s.workloadRow}>
-            {['Lecture', 'Tutorial', 'Lab', 'Project', 'Prep'].map((label, i) => (
-              data.workload[i] != null && (
-                <div key={label} style={s.workloadCell}>
-                  <span style={s.workloadNum}>{data.workload[i]}</span>
-                  <span style={s.workloadLabel}>{label}</span>
-                </div>
-              )
-            ))}
-            <div style={s.workloadCell}>
-              <span style={s.workloadNum}>
-                {data.workload.reduce((a, b) => a + (b || 0), 0).toFixed(0)}
-              </span>
-              <span style={s.workloadLabel}>Total hrs/wk</span>
-            </div>
-          </div>
-        )}
-
-        {/* Prerequisite / Preclusion */}
-        {(data.prerequisite || data.preclusion) && (
-          <div style={s.reqRow}>
-            {data.prerequisite && (
-              <div style={s.reqItem}>
-                <span style={s.reqLabel}>Prerequisite</span>
-                <span style={s.reqText}>{data.prerequisite}</span>
-              </div>
-            )}
-            {data.preclusion && (
-              <div style={s.reqItem}>
-                <span style={s.reqLabel}>Preclusion</span>
-                <span style={s.reqText}>{data.preclusion}</span>
-              </div>
-            )}
-          </div>
-        )}
 
         <p style={s.commentCount}>
           Based on <strong>{data.comment_count ?? 0}</strong> student reviews from NUSMods
@@ -161,25 +137,32 @@ function AnalysisResult({ data }) {
           <RecommendGauge score={data.recommend_score} />
         </div>
         <div className="card">
-          <h3 style={s.statTitle}>GPA Outcomes</h3>
-          {data.expected_gpa == null && data.actual_gpa == null ? (
+          <h3 style={s.statTitle}>Grade Outcomes</h3>
+          <p style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
+            Self-reported expected vs actual grade per student
+          </p>
+          {!data.grade_pairs || data.grade_pairs.length === 0 ? (
             <p style={{ color: '#94a3b8', fontSize: 13 }}>
-              No grade data found in reviews
+              No grade mentions found in reviews
             </p>
           ) : (
             <div>
-              {data.expected_gpa != null && (
-                <div style={s.gpaRow}>
-                  <span style={s.gpaLabel}>Expected GPA</span>
-                  <span style={s.gpaVal}>{data.expected_gpa.toFixed(2)}</span>
+              <div style={s.pairsHeader}>
+                <span style={s.pairsHdr}>#</span>
+                <span style={s.pairsHdr}>Expected</span>
+                <span style={s.pairsHdr}>Got</span>
+              </div>
+              {data.grade_pairs.map((p, i) => (
+                <div key={i} style={s.pairsRow}>
+                  <span style={s.pairsIdx}>{i + 1}</span>
+                  <span style={{ ...s.pairsGrade, color: p.expected ? '#2563eb' : '#94a3b8' }}>
+                    {p.expected ?? '—'}
+                  </span>
+                  <span style={{ ...s.pairsGrade, color: p.actual ? '#16a34a' : '#94a3b8' }}>
+                    {p.actual ?? '—'}
+                  </span>
                 </div>
-              )}
-              {data.actual_gpa != null && (
-                <div style={s.gpaRow}>
-                  <span style={s.gpaLabel}>Actual GPA</span>
-                  <span style={s.gpaVal}>{data.actual_gpa.toFixed(2)}</span>
-                </div>
-              )}
+              ))}
             </div>
           )}
         </div>
@@ -465,6 +448,17 @@ const s = {
   },
   gpaLabel: { color: '#64748b', fontSize: 13 },
   gpaVal: { fontWeight: 800, fontSize: 16, color: '#1e293b' },
+  pairsHeader: {
+    display: 'grid', gridTemplateColumns: '24px 1fr 1fr',
+    gap: 8, paddingBottom: 4, borderBottom: '1px solid var(--border)', marginBottom: 4,
+  },
+  pairsHdr: { fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' },
+  pairsRow: {
+    display: 'grid', gridTemplateColumns: '24px 1fr 1fr',
+    gap: 8, padding: '4px 0', borderBottom: '1px solid var(--border-light)',
+  },
+  pairsIdx: { fontSize: 11, color: 'var(--text-muted)' },
+  pairsGrade: { fontSize: 13, fontWeight: 700 },
   gradeTable: { display: 'flex', flexDirection: 'column', gap: 8 },
   gradeRow: { display: 'grid', gridTemplateColumns: '36px 1fr 48px', gap: 10, alignItems: 'center' },
   gradeLabel: { fontWeight: 700, fontSize: 13, color: 'var(--text)' },

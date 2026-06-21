@@ -12,6 +12,9 @@ env/
 # Database (don't commit the populated database)
 database/modules.db
 
+# Docs / local files
+*.pdf
+
 # macOS
 .DS_Store
 

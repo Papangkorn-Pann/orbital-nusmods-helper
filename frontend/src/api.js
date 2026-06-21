@@ -99,6 +99,11 @@ export const getSharedTimetable  = (token) => get(`/timetable/shared/${token}`)
 export const getEasiestModules    = (minComments = 5) => get(`/difficulty/${minComments}`)
 export const getMostRecommended   = (minComments = 5) => get(`/recommendation/${minComments}`)
 
+// ── CourseReg advisor ─────────────────────────────────────────────────────────
+
+export const getCourseRegAnalysis = (moduleCode, sem = 1) =>
+  get(`/coursereg/${encodeURIComponent(moduleCode)}?sem=${sem}`)
+
 // ── study plan ────────────────────────────────────────────────────────────────
 
 export const addExam = (body) => post('/studyplan/exams', body)

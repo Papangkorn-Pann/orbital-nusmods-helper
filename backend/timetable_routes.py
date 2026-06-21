@@ -191,9 +191,26 @@ def generate_timetable(body: GenerateRequest):
     if not body.module_codes:
         raise HTTPException(400, "No module codes provided")
     codes = [c.upper() for c in body.module_codes]
+
+    # Compute peer slot demand so popular slots get down-weighted in scoring
+    demand_conn = database_access.get_connection()
+    try:
+        rows = demand_conn.execute("""
+            SELECT module_code, lesson_type, class_no, COUNT(*) as cnt
+            FROM timetable_slots WHERE sem=?
+            GROUP BY module_code, lesson_type, class_no
+        """, (body.sem,)).fetchall()
+        slot_demand = {
+            f"{r['module_code']}|{r['lesson_type']}|{r['class_no']}": r['cnt']
+            for r in rows
+        }
+    finally:
+        demand_conn.close()
+
     try:
         results = timetable_generator.generate_timetables(
-            codes, body.sem, body.preferences, min(body.top_n, 10)
+            codes, body.sem, body.preferences, min(body.top_n, 10),
+            slot_demand=slot_demand,
         )
     except Exception as exc:
         raise HTTPException(500, str(exc))

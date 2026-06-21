@@ -6,3 +6,5 @@ vaderSentiment
 transformers
 torch
 python-dotenv
+slowapi
+google-genai
