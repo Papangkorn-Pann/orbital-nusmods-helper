@@ -1,4 +1,5 @@
-import sqlite3
+#import sqlite3
+import psycopg2
 from datetime import date, timedelta
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import PlainTextResponse
@@ -32,7 +33,7 @@ class ReviewRequest(BaseModel):
 # ── cards ─────────────────────────────────────────────────────────────────────
 
 @router.post("/studyplan/exams")
-def add_exam(body: AddExamRequest, conn: sqlite3.Connection = Depends(get_conn)):
+def add_exam(body: AddExamRequest, conn: psycopg2.extensions.connection = Depends(get_conn)):
     """Create one SM-2 card per topic, all starting review today."""
     if not database_access.get_user(body.user_id, conn):
         database_access.create_user(body.user_id, "Anonymous", None, None, None, conn)
@@ -52,7 +53,7 @@ def add_exam(body: AddExamRequest, conn: sqlite3.Connection = Depends(get_conn))
 
 
 @router.get("/studyplan/{user_id}/today")
-def get_today_cards(user_id: str, conn: sqlite3.Connection = Depends(get_conn)):
+def get_today_cards(user_id: str, conn: psycopg2.extensions.connection = Depends(get_conn)):
     today = date.today().isoformat()
     cards = database_access.get_due_cards(user_id, today, conn)
     return {"date": today, "due_count": len(cards), "cards": cards}
@@ -60,7 +61,7 @@ def get_today_cards(user_id: str, conn: sqlite3.Connection = Depends(get_conn)):
 
 @router.put("/studyplan/cards/{card_id}/review")
 def review_card(card_id: int, body: ReviewRequest,
-                conn: sqlite3.Connection = Depends(get_conn)):
+                conn: psycopg2.extensions.connection = Depends(get_conn)):
     if not 0 <= body.quality <= 5:
         raise HTTPException(400, "quality must be 0–5")
 
@@ -101,7 +102,7 @@ def review_card(card_id: int, body: ReviewRequest,
 
 
 @router.get("/studyplan/{user_id}/schedule")
-def get_schedule(user_id: str, conn: sqlite3.Connection = Depends(get_conn)):
+def get_schedule(user_id: str, conn: psycopg2.extensions.connection = Depends(get_conn)):
     cards = database_access.get_upcoming_cards(user_id, conn)
     return {"cards": cards}
 
@@ -109,7 +110,7 @@ def get_schedule(user_id: str, conn: sqlite3.Connection = Depends(get_conn)):
 # ── delete endpoints ──────────────────────────────────────────────────────────
 
 @router.delete("/studyplan/cards/{card_id}")
-def delete_card(card_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+def delete_card(card_id: int, conn: psycopg2.extensions.connection = Depends(get_conn)):
     """Delete a single study card."""
     if not database_access.get_card(card_id, conn):
         raise HTTPException(404, "Card not found")
@@ -119,7 +120,7 @@ def delete_card(card_id: int, conn: sqlite3.Connection = Depends(get_conn)):
 
 @router.delete("/studyplan/{user_id}/exams/{module_code}")
 def delete_exam(user_id: str, module_code: str,
-                conn: sqlite3.Connection = Depends(get_conn)):
+                conn: psycopg2.extensions.connection = Depends(get_conn)):
     """Delete all study cards for a given module (exam)."""
     database_access.delete_exam_cards(user_id, module_code.upper(), conn)
     return {"ok": True}
@@ -128,7 +129,7 @@ def delete_exam(user_id: str, module_code: str,
 # ── iCal export ───────────────────────────────────────────────────────────────
 
 @router.get("/studyplan/{user_id}/export.ics")
-def export_ical(user_id: str, conn: sqlite3.Connection = Depends(get_conn)):
+def export_ical(user_id: str, conn: psycopg2.extensions.connection = Depends(get_conn)):
     """Download all upcoming study cards as an RFC 5545 iCalendar file."""
     cards = database_access.get_upcoming_cards(user_id, conn)
 

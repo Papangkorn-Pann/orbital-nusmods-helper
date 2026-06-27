@@ -26,7 +26,7 @@ export default function Navbar() {
       <div style={styles.inner}>
         <span style={styles.brand}>NUSMods <span style={styles.accent}>Helper</span></span>
 
-        {/* Desktop links */}
+        {/* Links to various functions */}
         <div className="nav-links">
           {links.map(l => (
             <NavLink
@@ -40,7 +40,7 @@ export default function Navbar() {
           ))}
         </div>
 
-        {/* User info + logout */}
+        {/* User info + log out */}
         <div style={styles.userArea}>
           <NavLink to="/profile" style={styles.userInfo}>
             {user.picture && (
@@ -51,7 +51,7 @@ export default function Navbar() {
           <button onClick={logout} style={styles.logoutBtn}>Logout</button>
         </div>
 
-        {/* Mobile hamburger */}
+        {/* Hamburger */}
         <button className="nav-burger" onClick={() => setOpen(o => !o)} aria-label="Menu">
           <span style={{ ...styles.bar, transform: open ? 'rotate(45deg) translate(5px, 5px)' : 'none' }} />
           <span style={{ ...styles.bar, opacity: open ? 0 : 1 }} />

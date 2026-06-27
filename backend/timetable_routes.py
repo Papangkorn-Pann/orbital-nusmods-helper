@@ -1,6 +1,7 @@
 import json
 import secrets
-import sqlite3
+#import sqlite3
+import psycopg2
 import uuid
 from datetime import date, timedelta
 from typing import List, Optional
@@ -116,7 +117,7 @@ def get_module_slots(module_code: str, sem: int = 1):
 # ── user timetable CRUD ────────────────────────────────────────────────────────
 
 @router.get("/timetable/{user_id}")
-def get_timetable(user_id: str, sem: int = 1, conn: sqlite3.Connection = Depends(get_conn)):
+def get_timetable(user_id: str, sem: int = 1, conn: psycopg2.extensions.connection = Depends(get_conn)):
     """
     Returns the user's saved slot selections together with the full
     NUSMods slot details so the frontend can render the grid immediately.
@@ -151,7 +152,7 @@ def get_timetable(user_id: str, sem: int = 1, conn: sqlite3.Connection = Depends
 
 @router.put("/timetable/{user_id}/slots")
 def update_slot(user_id: str, body: SlotSelection,
-                conn: sqlite3.Connection = Depends(get_conn)):
+                conn: psycopg2.extensions.connection = Depends(get_conn)):
     """Add or change a module slot selection."""
     # Ensure user exists (create a stub if first visit)
     if not database_access.get_user(user_id, conn):
@@ -165,7 +166,7 @@ def update_slot(user_id: str, body: SlotSelection,
 
 @router.get("/timetable/{user_id}/export.ics")
 def export_timetable_ical(user_id: str, sem: int = 1,
-                           conn: sqlite3.Connection = Depends(get_conn)):
+                           conn: psycopg2.extensions.connection = Depends(get_conn)):
     """Download the user's timetable as an iCalendar (.ics) file."""
     timetable = get_timetable(user_id, sem, conn)
     ical = _slots_to_ical(timetable["rendered_slots"], sem)
@@ -178,7 +179,7 @@ def export_timetable_ical(user_id: str, sem: int = 1,
 
 @router.delete("/timetable/{user_id}/modules/{module_code}")
 def remove_module(user_id: str, module_code: str, sem: int = 1,
-                  conn: sqlite3.Connection = Depends(get_conn)):
+                  conn: psycopg2.extensions.connection = Depends(get_conn)):
     database_access.delete_timetable_module(user_id, module_code.upper(), sem, conn)
     return {"ok": True}
 
@@ -194,12 +195,14 @@ def generate_timetable(body: GenerateRequest):
 
     # Compute peer slot demand so popular slots get down-weighted in scoring
     demand_conn = database_access.get_connection()
+    cur = demand_conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     try:
-        rows = demand_conn.execute("""
+        cur.execute("""
             SELECT module_code, lesson_type, class_no, COUNT(*) as cnt
-            FROM timetable_slots WHERE sem=?
+            FROM timetable_slots WHERE sem=%s
             GROUP BY module_code, lesson_type, class_no
-        """, (body.sem,)).fetchall()
+        """, (body.sem,))
+        rows = cur.fetchall()
         slot_demand = {
             f"{r['module_code']}|{r['lesson_type']}|{r['class_no']}": r['cnt']
             for r in rows
@@ -221,7 +224,7 @@ def generate_timetable(body: GenerateRequest):
 
 @router.post("/timetable/share")
 def share_timetable(body: ShareRequest,
-                    conn: sqlite3.Connection = Depends(get_conn)):
+                    conn: psycopg2.extensions.connection = Depends(get_conn)):
     """Snapshot the user's current selections and return a shareable token."""
     all_selections = database_access.get_user_timetable(body.user_id, body.sem, conn)
 
@@ -242,7 +245,7 @@ def share_timetable(body: ShareRequest,
 
 @router.get("/timetable/shared/{token}")
 def get_shared_timetable(token: str,
-                         conn: sqlite3.Connection = Depends(get_conn)):
+                         conn: psycopg2.extensions.connection = Depends(get_conn)):
     """Return a previously shared timetable snapshot (read-only)."""
     share = database_access.get_timetable_share(token, conn)
     if not share:

@@ -1,4 +1,5 @@
-import sqlite3
+#import sqlite3
+import psycopg2
 import secrets
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -54,7 +55,7 @@ class JoinGroupRequest(BaseModel):
 # ── users ─────────────────────────────────────────────────────────────────────
 
 @router.post("/users")
-def create_user(body: CreateUserRequest, conn: sqlite3.Connection = Depends(get_conn)):
+def create_user(body: CreateUserRequest, conn: psycopg2.extensions.connection = Depends(get_conn)):
     database_access.create_user(
         body.user_id, body.display_name, body.faculty, body.year_of_study, body.course, conn
     )
@@ -62,7 +63,7 @@ def create_user(body: CreateUserRequest, conn: sqlite3.Connection = Depends(get_
 
 
 @router.get("/users/{user_id}")
-def get_user(user_id: str, conn: sqlite3.Connection = Depends(get_conn)):
+def get_user(user_id: str, conn: psycopg2.extensions.connection = Depends(get_conn)):
     user = database_access.get_user(user_id, conn)
     if not user:
         raise HTTPException(404, "User not found")
@@ -71,7 +72,7 @@ def get_user(user_id: str, conn: sqlite3.Connection = Depends(get_conn)):
 
 @router.put("/users/{user_id}")
 def update_user(user_id: str, body: UpdateUserRequest,
-                conn: sqlite3.Connection = Depends(get_conn)):
+                conn: psycopg2.extensions.connection = Depends(get_conn)):
     user = database_access.get_user(user_id, conn)
     if not user:
         raise HTTPException(404, "User not found")
@@ -89,7 +90,7 @@ def update_user(user_id: str, body: UpdateUserRequest,
 # ── timer sessions ────────────────────────────────────────────────────────────
 
 @router.post("/timer/sessions")
-def start_session(body: StartSessionRequest, conn: sqlite3.Connection = Depends(get_conn)):
+def start_session(body: StartSessionRequest, conn: psycopg2.extensions.connection = Depends(get_conn)):
     if not database_access.get_user(body.user_id, conn):
         database_access.create_user(body.user_id, "Anonymous", None, None, None, conn)
     start_time = datetime.now(timezone.utc).isoformat()
@@ -99,11 +100,13 @@ def start_session(body: StartSessionRequest, conn: sqlite3.Connection = Depends(
 
 @router.put("/timer/sessions/{session_id}")
 def stop_session(session_id: int, body: StopSessionRequest,
-                 conn: sqlite3.Connection = Depends(get_conn)):
+                 conn: psycopg2.extensions.connection = Depends(get_conn)):
     # Calculate duration from stored start_time
-    row = conn.execute(
-        "SELECT start_time FROM study_sessions WHERE id=?", (session_id,)
-    ).fetchone()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT start_time FROM study_sessions WHERE id=%s", (session_id,)
+    )
+    row = cur.fetchone()
     if not row:
         raise HTTPException(404, "Session not found")
 
@@ -116,13 +119,13 @@ def stop_session(session_id: int, body: StopSessionRequest,
 
 
 @router.get("/timer/stats/{user_id}")
-def get_stats(user_id: str, conn: sqlite3.Connection = Depends(get_conn)):
+def get_stats(user_id: str, conn: psycopg2.extensions.connection = Depends(get_conn)):
     return database_access.get_user_timer_stats(user_id, conn)
 
 
 @router.get("/timer/history/{user_id}")
 def get_history(user_id: str, days: int = 7,
-                conn: sqlite3.Connection = Depends(get_conn)):
+                conn: psycopg2.extensions.connection = Depends(get_conn)):
     return database_access.get_session_history(user_id, days, conn)
 
 
@@ -131,7 +134,7 @@ def get_leaderboard(
     faculty: Optional[str] = Query(None),
     year:    Optional[int] = Query(None),
     course:  Optional[str] = Query(None),
-    conn:    sqlite3.Connection = Depends(get_conn),
+    conn:    psycopg2.extensions.connection = Depends(get_conn),
 ):
     return database_access.get_leaderboard(faculty, year, course, conn)
 
@@ -139,7 +142,7 @@ def get_leaderboard(
 # ── study groups ──────────────────────────────────────────────────────────────
 
 @router.post("/groups")
-def create_group(body: CreateGroupRequest, conn: sqlite3.Connection = Depends(get_conn)):
+def create_group(body: CreateGroupRequest, conn: psycopg2.extensions.connection = Depends(get_conn)):
     if not database_access.get_user(body.user_id, conn):
         database_access.create_user(body.user_id, "Anonymous", None, None, None, conn)
     invite_code = secrets.token_urlsafe(6).upper()
@@ -149,7 +152,7 @@ def create_group(body: CreateGroupRequest, conn: sqlite3.Connection = Depends(ge
 
 @router.post("/groups/{invite_code}/join")
 def join_group(invite_code: str, body: JoinGroupRequest,
-               conn: sqlite3.Connection = Depends(get_conn)):
+               conn: psycopg2.extensions.connection = Depends(get_conn)):
     group = database_access.get_group_by_code(invite_code, conn)
     if not group:
         raise HTTPException(404, "Group not found")
@@ -160,7 +163,7 @@ def join_group(invite_code: str, body: JoinGroupRequest,
 
 
 @router.get("/groups/{invite_code}")
-def get_group(invite_code: str, conn: sqlite3.Connection = Depends(get_conn)):
+def get_group(invite_code: str, conn: psycopg2.extensions.connection = Depends(get_conn)):
     group = database_access.get_group_by_code(invite_code, conn)
     if not group:
         raise HTTPException(404, "Group not found")
@@ -170,7 +173,7 @@ def get_group(invite_code: str, conn: sqlite3.Connection = Depends(get_conn)):
 
 @router.delete("/groups/{invite_code}/members/{user_id}")
 def leave_group(invite_code: str, user_id: str,
-                conn: sqlite3.Connection = Depends(get_conn)):
+                conn: psycopg2.extensions.connection = Depends(get_conn)):
     group = database_access.get_group_by_code(invite_code, conn)
     if not group:
         raise HTTPException(404, "Group not found")

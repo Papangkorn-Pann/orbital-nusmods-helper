@@ -1,5 +1,6 @@
 import os
-import sqlite3
+#import sqlite3
+import psycopg2
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -25,7 +26,7 @@ class GoogleAuthRequest(BaseModel):
 
 
 @router.post("/auth/google")
-def google_login(body: GoogleAuthRequest, conn: sqlite3.Connection = Depends(get_conn)):
+def google_login(body: GoogleAuthRequest, conn: psycopg2.extensions.connection = Depends(get_conn)):
     try:
         idinfo = id_token.verify_oauth2_token(
             body.credential,
@@ -41,9 +42,10 @@ def google_login(body: GoogleAuthRequest, conn: sqlite3.Connection = Depends(get
     name    = idinfo.get("name", "")
     picture = idinfo.get("picture", "")
 
-    conn.execute("""
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
         INSERT INTO users (user_id, display_name, email, picture)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
         ON CONFLICT(user_id) DO UPDATE SET
             display_name = excluded.display_name,
             email        = excluded.email,

@@ -4,7 +4,8 @@ import threading
 import nlp
 import database_access
 import api
-import sqlite3
+#import sqlite3
+import psycopg2
 
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -88,7 +89,7 @@ def return_formatter(module_code: str,
 
 @app.get("/course/{module_code}")
 @limiter.limit("10/minute")
-def get_course(request: Request, module_code: str, conn: sqlite3.Connection = Depends(get_conn)):
+def get_course(request: Request, module_code: str, conn: psycopg2.extensions.connection = Depends(get_conn)):
 
     module_code = module_code.upper()
 
@@ -304,7 +305,7 @@ def get_course(request: Request, module_code: str, conn: sqlite3.Connection = De
 
 #list top 30 courses with lowest difficulty, subject to minimum number of comments threshold
 @app.get("/difficulty/{comment_count}")
-def get_lowest_difficulty_courses(comment_count: int, conn: sqlite3.Connection = Depends(get_conn)):
+def get_lowest_difficulty_courses(comment_count: int, conn: psycopg2.extensions.connection = Depends(get_conn)):
 
     cursor = conn.cursor()
 
@@ -318,7 +319,7 @@ def get_lowest_difficulty_courses(comment_count: int, conn: sqlite3.Connection =
         FROM module_scores
         WHERE
             difficulty_score IS NOT NULL
-            AND comment_count >= ?
+            AND comment_count >= %s
         ORDER BY difficulty_score ASC
         LIMIT 30
     """, (comment_count,))
@@ -341,7 +342,7 @@ def get_lowest_difficulty_courses(comment_count: int, conn: sqlite3.Connection =
 
 #list top 30 courses with highest recommendation score, subject to minimum number of comments threshold
 @app.get("/recommendation/{comment_count}")
-def get_highest_recommend_courses(comment_count: int, conn: sqlite3.Connection = Depends(get_conn)):
+def get_highest_recommend_courses(comment_count: int, conn: psycopg2.extensions.connection = Depends(get_conn)):
 
     cursor = conn.cursor()
 
@@ -355,7 +356,7 @@ def get_highest_recommend_courses(comment_count: int, conn: sqlite3.Connection =
         FROM module_scores
         WHERE
             recommend_score IS NOT NULL
-            AND comment_count >= ?
+            AND comment_count >= %s
         ORDER BY recommend_score DESC
         LIMIT 30
     """, (comment_count,))

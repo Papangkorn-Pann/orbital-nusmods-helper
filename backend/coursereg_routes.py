@@ -15,7 +15,8 @@ patterns (R0: special, R1A: final-year priority, R1B: all undergrads, R2: leftov
 """
 
 import math
-import sqlite3
+#import sqlite3
+import psycopg2
 from fastapi import APIRouter, HTTPException, Query, Depends
 import api as nusmods_api
 import database_access
@@ -53,14 +54,16 @@ def _time_desirability(start: str) -> float:
     return 0.25                   # evening classes
 
 
-def _slot_demand_counts(module_code: str, sem: int, conn: sqlite3.Connection) -> dict:
+def _slot_demand_counts(module_code: str, sem: int, conn: psycopg2.extensions.connection) -> dict:
     """Return {(lesson_type, class_no): count} of user selections from the DB."""
-    rows = conn.execute("""
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    rows = cur.execute("""
         SELECT lesson_type, class_no, COUNT(*) AS cnt
         FROM timetable_slots
-        WHERE module_code = ? AND sem = ?
+        WHERE module_code = %s AND sem = %s
         GROUP BY lesson_type, class_no
-    """, (module_code.upper(), sem)).fetchall()
+    """, (module_code.upper(), sem))
+    rows = cur.fetchall()
     return {(r["lesson_type"], r["class_no"]): r["cnt"] for r in rows}
 
 
@@ -156,7 +159,7 @@ def _recommendation(score: float) -> str:
 def get_coursereg_analysis(
     module_code: str,
     sem: int = Query(1, ge=1, le=2),
-    conn: sqlite3.Connection = Depends(get_conn),
+    conn: psycopg2.extensions.connection = Depends(get_conn),
 ):
     """
     Return competition scores and estimated bid-success probabilities for every
