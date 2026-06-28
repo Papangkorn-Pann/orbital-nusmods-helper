@@ -65,12 +65,14 @@ function ReviewSummary({ summary, gradeThresholds, commentCount }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {summary && (
-        <div className="card">
-          <h3 style={s.statTitle}>Student Review Summary</h3>
-          <p style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.7, margin: 0 }}>{summary}</p>
-        </div>
-      )}
+      <div className="card">
+        <h3 style={s.statTitle}>Student Review Summary</h3>
+        {summary
+          ? <p style={{ fontSize: 14, color: 'var(--text)', lineHeight: 1.7, margin: 0 }}>{summary}</p>
+          : <p style={{ fontSize: 14, color: 'var(--text-muted)', fontStyle: 'italic', lineHeight: 1.7, margin: 0 }}>
+              AI summary is being generated — check back shortly.
+            </p>}
+      </div>
 
       {gradeThresholds && Object.keys(gradeThresholds).length > 0 && (
         <div className="card">
@@ -254,6 +256,7 @@ export default function ModuleAnalysis() {
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState('')
   const [hoveredIdx,  setHoveredIdx]  = useState(-1)
+  const searchTimeout = useRef(null)
 
   async function analyze(code) {
     setLoading(true)

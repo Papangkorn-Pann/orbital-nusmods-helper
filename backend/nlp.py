@@ -27,67 +27,62 @@ def analyze_sentiment(comment):
     else:
         return "neutral"
 
-from transformers import pipeline
+_GEMINI_MODELS = ["models/gemini-2.5-flash-lite", "models/gemini-2.5-flash"]
 
-classifier = pipeline(
-    "zero-shot-classification",
-    model="facebook/bart-large-mnli"
-)
 
-difficulty_labels = [
-    "very easy",
-    "easy",
-    "moderate",
-    "hard",
-    "very hard"
-]
+def _gemini_generate(client, prompt, retries=3):
+    """
+    Call Gemini, retrying transient 503/429 overload errors with exponential
+    backoff. If the primary model stays overloaded, fall back to the next model.
+    Raises the last error if every attempt fails.
+    """
+    import time
+    last_err = None
+    for model in _GEMINI_MODELS:
+        for attempt in range(retries):
+            try:
+                return client.models.generate_content(model=model, contents=prompt)
+            except Exception as e:
+                last_err = e
+                msg = str(e)
+                transient = any(t in msg for t in ("503", "UNAVAILABLE", "429", "RESOURCE_EXHAUSTED"))
+                if not transient:
+                    raise
+                time.sleep(2 ** attempt)  # 1s, 2s, 4s
+    raise last_err
 
-recommend_labels = [
-    "recommend",
-    "not recommend"
-]
 
-difficulty_map = {
-    "very easy": 1,
-    "easy": 2,
-    "moderate": 3,
-    "hard": 4,
-    "very hard": 5
-}
-
-recommend_map = {
-    "recommend": 1,
-    "not recommend": 0
-}
-
-def analyze_diff_recc(comment):
-
-    cleaned = clean_comment_message(comment)
-
-    #multi_label=False ensures total weights of each category sums to 1
-    difficulty_result = classifier(cleaned, difficulty_labels, multi_label=False)
-    recommend_result = classifier(cleaned, recommend_labels, multi_label=False)
-
-    difficulty_score = 0
-
-    for label, confidence in zip(
-        difficulty_result["labels"],
-        difficulty_result["scores"]
-    ):
-        difficulty_score += difficulty_map[label] * confidence
-
-    recommend_score = 0
-
-    for label, confidence in zip(
-        recommend_result["labels"],
-        recommend_result["scores"]
-    ):
-        recommend_score += recommend_map[label] * confidence
-
-    return {
-        "difficulty_score": difficulty_score,
-        "recommend_score": recommend_score
-    }
+def analyze_difficulty_gemini(texts: list) -> float | None:
+    """
+    Send up to 50 review texts to Gemini and return a difficulty score 1.0–5.0.
+    Returns None if the API call fails or no texts are provided.
+    """
+    if not texts:
+        return None
+    from config import GEMINI_API_KEY as api_key
+    try:
+        from google import genai
+        client = genai.Client(api_key=api_key)
+        combined = "\n\n---\n\n".join(texts[:50])
+        if len(combined) > 8000:
+            combined = combined[:8000]
+        prompt = (
+            "You are rating the difficulty of an NUS university module based on student reviews. "
+            "Read ALL the reviews below carefully. "
+            "Return ONLY a single decimal number between 1.0 and 5.0 representing overall difficulty "
+            "(1.0=very easy, 2.0=easy, 3.0=moderate, 4.0=hard, 5.0=very hard). "
+            "No explanation, no units, just the number.\n\n"
+            f"Reviews:\n{combined}"
+        )
+        response = _gemini_generate(client, prompt)
+        import re as _re
+        m = _re.search(r'\d+\.?\d*', response.text or "")
+        if not m:
+            return None
+        return max(1.0, min(5.0, float(m.group())))
+    except Exception as e:
+        print(f"Gemini difficulty scoring failed: {e}")
+        return None
 
 grade_map = {
     "A+": 5.0,
@@ -295,51 +290,47 @@ def _collect_topic_sentences(texts, max_per_topic=3, max_total=15):
 
 def ai_summarize(texts):
     """
-    Send all reviews to Gemini 1.5 Flash for a comprehensive AI-written summary.
+    Send all reviews to Gemini for a comprehensive AI-written summary.
+    Returns (summary_text, gemini_succeeded: bool).
     Falls back to extractive sentence collection if the API call fails.
     """
     if not texts:
-        return None
+        return None, False
 
-    import os
-    from dotenv import load_dotenv
-    load_dotenv()
-    api_key = os.getenv("GEMINI_API_KEY")
+    from config import GEMINI_API_KEY as api_key
+    from google import genai
+    client = genai.Client(api_key=api_key)
 
-    if api_key:
-        try:
-            from google import genai
-            client = genai.Client(api_key=api_key)
+    try:
+        # Use all reviews, capped at ~8000 chars to stay within free-tier limits
+        combined = "\n\n---\n\n".join(texts[:50])
+        if len(combined) > 8000:
+            combined = combined[:8000]
 
-            # Use all reviews, capped at ~8000 chars to stay within free-tier limits
-            combined = "\n\n---\n\n".join(texts[:50])
-            if len(combined) > 8000:
-                combined = combined[:8000]
+        prompt = (
+            "You are summarising student reviews for an NUS university module. "
+            "Read ALL the reviews below carefully. "
+            "Write a comprehensive 5–8 sentence summary paragraph ENTIRELY IN THIRD PERSON — "
+            "use language like 'Students find...', 'The module is...', 'Many reviewers note...'. "
+            "NEVER use first-person pronouns (I, we, my, our). "
+            "Cover: overall difficulty, course content and key topics, weekly workload, "
+            "teaching quality, assessment structure (exams, assignments, projects), "
+            "and whether students recommend the module. "
+            "Be specific and factual — mention concrete details students raised. "
+            "Do not use bullet points. Write in flowing prose.\n\n"
+            f"Reviews:\n{combined}"
+        )
 
-            prompt = (
-                "You are summarising student reviews for an NUS module. "
-                "Read ALL the reviews below and write a comprehensive 5–8 sentence paragraph that covers: "
-                "overall difficulty, course content and topics, weekly workload, teaching quality, "
-                "assessment structure, and whether students recommend it. "
-                "Be specific and factual — mention details students actually raised. "
-                "Do not use bullet points. Write in flowing prose.\n\n"
-                f"Reviews:\n{combined}"
-            )
+        response = _gemini_generate(client, prompt)
+        summary = (response.text or "").strip()
+        if summary:
+            return summary, True
+    except Exception as e:
+        print(f"Gemini summarisation failed: {type(e).__name__}: {e}")
 
-            response = client.models.generate_content(
-                model="models/gemini-2.5-flash-lite", contents=prompt
-            )
-            summary = response.text.strip()
-            return summary if summary else None
-        except Exception as e:
-            print(f"Gemini summarisation failed: {e}")
-
-    # Fallback: extractive sentence collection
-    selected = _collect_topic_sentences(texts, max_per_topic=3, max_total=15)
-    if not selected:
-        return extractive_summarize(texts)
-    joined = " ".join(selected)
-    return joined if joined.endswith(".") else joined + "."
+    # No extractive copy-paste fallback: return None so the frontend shows a
+    # placeholder. The module stays uncached (version 2) and re-runs next view.
+    return None, False
 
 
 # ── Grade threshold extraction ────────────────────────────────────────────────

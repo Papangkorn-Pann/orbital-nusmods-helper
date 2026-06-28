@@ -537,7 +537,7 @@ const styles = {
     position: 'sticky',
     top: 72,
     maxHeight: 'calc(100vh - 90px)',
-    overflowY: 'auto',
+    overflowY: 'visible',
   },
   gridCol: {},
   hint: { color: '#94a3b8', textAlign: 'center', marginTop: 40, fontSize: 14 },

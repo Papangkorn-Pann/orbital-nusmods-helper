@@ -2,6 +2,7 @@ import json
 import secrets
 #import sqlite3
 import psycopg2
+import psycopg2.extras
 import uuid
 from datetime import date, timedelta
 from typing import List, Optional

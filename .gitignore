@@ -5,6 +5,15 @@
 .venv/
 venv/
 env/
+__pycache__/
+*.pyc
+*.pyo
+
+# Example env files
+*.env.example
+
+# Local notes
+ms2instruction.md
 
 # Docs / local files
 *.pdf

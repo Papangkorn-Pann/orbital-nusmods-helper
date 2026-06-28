@@ -1,6 +1,7 @@
-import os
 #import sqlite3
 import psycopg2
+import psycopg2.extras
+from config import GOOGLE_CLIENT_ID
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -10,8 +11,6 @@ from google.auth.transport import requests as google_requests
 import database_access
 
 router = APIRouter(tags=["auth"])
-
-GOOGLE_CLIENT_ID = '983645078516-1hoft0efmob4tncjlfl2ec7hnbor3dpu.apps.googleusercontent.com'
 
 def get_conn():
     conn = database_access.get_connection()

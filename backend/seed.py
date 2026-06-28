@@ -8,9 +8,9 @@ Usage (backend must already be running on port 8000):
     # Or from inside backend/:
     ../.venv/bin/python3 seed.py
 
-Each module takes ~30-90 s on first run (BART NLP).
-Modules already cached at analysis_version >= 1 are skipped instantly.
-Total time for a fully cold run: ~30-60 minutes.
+Each module takes ~2-5 s on first run (Gemini API call for difficulty + summary).
+Modules already cached at analysis_version >= 2 are skipped instantly.
+Total time for a fully cold run: ~5-10 minutes.
 """
 
 import time

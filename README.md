@@ -30,7 +30,7 @@ I then want to use that information to choose appropriate modules and automatica
 The current build implements four feature groups. Each section below explains what the feature does and which files implement it.
 
 **1. Module Analysis** — `backend/main.py`, `backend/nlp.py`, `backend/api.py`, `frontend/src/pages/ModuleAnalysis.jsx`  
-Enter a module code (e.g. `CS2040S`) in the Module Analysis page. The backend fetches the module description from the NUSMods API and student reviews from Disqus, then runs three NLP layers: VADER sentiment analysis, BART zero-shot classification for difficulty (1–5) and recommendation (0–1), and regex grade extraction. Returns a one-screen summary — difficulty score, recommendation %, expected/actual GPA averages, the most-liked positive/neutral/negative comments, and a flag when no reviews are found. Results are cached in SQLite; repeat lookups are instant. A Top Modules discovery panel lists the easiest and most-recommended modules from the cache. NLP inference is serialised via a threading semaphore to prevent OOM under concurrent load; the API returns HTTP 503 with a friendly message if a request arrives while another is being processed.
+Enter a module code (e.g. `CS2040S`) in the Module Analysis page. The backend fetches the module description from the NUSMods API and student reviews from Disqus, then runs three NLP layers: VADER sentiment analysis, Gemini AI difficulty scoring (1–5), and regex grade extraction. Returns a one-screen summary — difficulty score, recommendation %, expected/actual GPA averages, the most-liked positive/neutral/negative comments, and a flag when no reviews are found. Results are cached; repeat lookups are instant. A Top Modules discovery panel lists the easiest and most-recommended modules from the cache.
 
 **2. Conflict-Aware Timetable Builder** — `backend/timetable_routes.py`, `backend/timetable_generator.py`, `frontend/src/pages/Timetable.jsx`, `frontend/src/components/timetable/`  
 Search for modules, pick a lesson type, and choose a class slot. The grid renders Monday–Friday from 08:00 to 22:00 in 30-minute rows and prevents conflicting slots. **Auto-Generate** runs a backtracking algorithm across all added modules, scores up to 5 conflict-free timetables by five weighted preferences (latest start, earliest end, lunch break, compact days, minimal gaps), and lets you apply the result in one click. **Share** creates a 30-day shareable link that renders a read-only timetable view for anyone with the URL. The timetable can also be printed via the 🖨 Print button. Slot selections are persisted per user in `timetable_slots`.
@@ -72,8 +72,6 @@ source ../.venv/bin/activate     # Windows: ..\.venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-> **Note:** `transformers` is like 2GB so you are gonna need space and time to run this command
-
 ### Run the backend
 
 ```bash
@@ -83,7 +81,7 @@ uvicorn main:app --reload
 
 The API runs at `http://localhost:8000`. Interactive docs at `/docs`.
 
-> First install downloads `torch` and `transformers` (~2 GB). First module lookup is slow while BART loads into memory; subsequent lookups hit the SQLite cache and return instantly.
+> First module lookup calls the Gemini AI API for difficulty scoring and summary; subsequent lookups hit the cache and return instantly.
 
 **Frontend**
 
@@ -99,7 +97,7 @@ Open `http://localhost:5173`. The frontend proxies `/api` to the backend, so bot
 
 ## User Guide
 
-1. **Look up a module.** Go to Module Analysis, type a code like `CS2040S`, hit Analyze. You'll see difficulty (1–5), recommendation %, expected/actual GPA, and three representative reviews. First lookup takes 30–60 s while BART runs; cached lookups are instant. The Top Modules panel at the top shows the easiest and most-recommended modules from the cache — click any row to analyse it directly.
+1. **Look up a module.** Go to Module Analysis, type a code like `CS2040S`, hit Analyze. You'll see difficulty (1–5), recommendation %, expected/actual GPA, and three representative reviews. First lookup calls Gemini AI for difficulty scoring; cached lookups are instant. The Top Modules panel at the top shows the easiest and most-recommended modules from the cache — click any row to analyse it directly.
 2. **Build a timetable.** Go to Timetable, search for a module, click a lesson type, pick a class. Add more modules; the grid prevents conflicts. Click **✨ Auto-Generate** to have the backtracking optimizer find the top 5 timetables for your preferences; click Apply on any result. Click **🔗 Share** to get a shareable link. Click **🖨 Print** to print a clean copy.
 3. **Start a study session.** Go to Timer, click Start. Stop when done. Visit the Leaderboard tab to see where you rank this week.
 4. **Plan for an exam.** Go to Study Plan, enter the module code, exam date, and a list of topics. Each day, return and review whichever cards are due. Build a streak to keep motivation up. Export to `.ics` to add all review dates to your calendar.
@@ -145,9 +143,9 @@ FastAPI generates OpenAPI docs from type hints, validates request bodies with Py
 
 `vaderSentiment.SentimentIntensityAnalyzer` returns a compound score in [−1, +1]; ≥ 0.05 is positive, ≤ −0.05 is negative. VADER is lexicon-based, runs in-process with no GPU, and is tuned for short informal text — a fit for student reviews. Comments are pre-cleaned via BeautifulSoup (strip HTML) and a whitespace regex before scoring. See `backend/nlp.py::analyze_sentiment`.
 
-### Difficulty and recommendation — BART zero-shot classification
+### Difficulty scoring — Gemini AI
 
-`facebook/bart-large-mnli` is fine-tuned on natural language inference; given a piece of text and candidate labels, it scores how well each label describes the text. We use five ordinal labels for difficulty (`very easy` → `very hard`, mapped to 1–5) and two for recommendation (`recommend` → 1.0, `not recommend` → 0.0). The implementation takes a confidence-weighted average across labels rather than a hard top-1 pick, so a comment scoring 60% "hard" / 40% "moderate" yields `4×0.6 + 3×0.4 = 3.6`. Only the top 30 most-liked comments are processed per module, because BART CPU inference is slow. See `backend/nlp.py::analyze_diff_recc`.
+`analyze_difficulty_gemini` in `backend/nlp.py` sends the top 50 most-liked student reviews (capped at 8 000 chars) to `gemini-2.5-flash-lite` in a single API call and asks for a single 1.0–5.0 difficulty score. This replaced a 50-iteration BART loop, cutting first-lookup time from ~60 s to ~2 s and eliminating the 2 GB torch dependency. The recommendation score (0–1) is derived separately from VADER sentiment ratios across all comments.
 
 ### Grade extraction — verbose regex
 
@@ -175,9 +173,9 @@ The architecture relies on a few standard principles. Each is illustrated by cod
 
 **Dependency injection.** FastAPI's `Depends(get_conn)` injects a fresh SQLite connection per request and tears it down via `finally`. Handlers never construct connections themselves, which centralises lifecycle management and makes per-request resource leaks impossible.
 
-**Single responsibility.** Each module owns one concern: `sm2.review_card` is a pure function with no I/O; `clean_comment_message` strips HTML; `analyze_sentiment`, `analyze_diff_recc`, and the two `extract_*_gpa` functions each do exactly one thing. This makes them individually testable.
+**Single responsibility.** Each module owns one concern: `sm2.review_card` is a pure function with no I/O; `clean_comment_message` strips HTML; `analyze_sentiment`, `analyze_difficulty_gemini`, and the two `extract_*_gpa` functions each do exactly one thing. This makes them individually testable.
 
-**Caching as a first-class boundary.** Expensive NLP work runs once per module; results land in `module_scores`. The lookup endpoint checks the cache first and only falls through to the BART pipeline on a miss. This is invisible to the frontend but turns 30-second lookups into instant ones for previously seen modules.
+**Caching as a first-class boundary.** Expensive NLP work runs once per module; results land in `module_scores`. The lookup endpoint checks the cache first and only falls through to the Gemini AI pipeline on a miss. This is invisible to the frontend but turns 30-second lookups into instant ones for previously seen modules.
 
 **Input validation at the edge.** Module codes are rejected immediately if they fail `^[A-Z]{2,3}\d{4}[A-Z]{0,2}$` (see `main.py`), preventing wasted Disqus/NUSMods calls on malformed input.
 
@@ -204,11 +202,11 @@ The architecture relies on a few standard principles. Each is illustrated by cod
 The full sprint-by-sprint log is in `docs/project-log.md` (link will be added when the file is committed). Summary of work done in this milestone period:
 
 - **Week 1 (13–19 May):** project proposal, repo bootstrap, NUSMods + Disqus API exploration, sentiment pipeline (VADER) prototyped.
-- **Week 2 (20–26 May):** BART zero-shot integration, grade-extraction regex, SQLite schema and caching layer, FastAPI router split.
+- **Week 2 (20–26 May):** BART zero-shot integration (later migrated to Gemini), grade-extraction regex, SQLite schema and caching layer, FastAPI router split.
 - **Week 3 (27 May – 1 June):** React frontend, timetable grid, timer + leaderboard, SM-2 study planner, anonymous identity via `localStorage`, Milestone 1 document.
 - **Week 4 (2–8 June):** Module Analysis page (NLP pipeline surfaced as a dedicated React page with autocomplete search), Top Modules discovery panel, no-reviews message, responsive grids.
 - **Week 5 (9–15 June):** Backtracking timetable auto-generator (`timetable_generator.py`), preference sliders, Generate modal with apply flow, timetable share links with 30-day SQLite TTL, shared timetable read-only view.
-- **Week 6 (16–22 June):** Study plan: streak tracking, per-card and per-exam deletion, `.ics` export. NLP rate-limiting semaphore (HTTP 503 on contention). Print support for timetable. `DISQUS_API_KEY` graceful fallback. `.env.example` created. Milestone 2 document.
+- **Week 6 (16–22 June):** Study plan: streak tracking, per-card and per-exam deletion, `.ics` export. BART→Gemini migration (difficulty scoring, summary). Print support for timetable. `DISQUS_API_KEY` graceful fallback. `.env.example` created. Milestone 2 document.
 
 ---
 

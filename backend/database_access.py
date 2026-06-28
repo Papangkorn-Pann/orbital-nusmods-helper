@@ -1,7 +1,6 @@
 import psycopg2
 import psycopg2.extras
-
-DATABASE_URL = "postgresql://postgres:Vhallfolks55@db.dzmtwhiuqvlrlqbfvmvw.supabase.co:5432/postgres"
+from config import DATABASE_URL
 
 
 def init_db():
@@ -159,9 +158,10 @@ def save_module_data(module_code, title, description, module_credits, department
                      top_positive_comment, top_neutral_comment, top_negative_comment,
                      comment_count, expected_gpa, actual_gpa,
                      summary, grade_thresholds_json, grade_pairs_json,
-                     workload_json, prerequisite, preclusion, conn):
+                     workload_json, prerequisite, preclusion, conn,
+                     analysis_version=3):
     cur = conn.cursor()
-    cur.execute("""
+    cur.execute(f"""
         INSERT INTO module_scores
         (module_code, title, description, module_credits, department,
          difficulty_score, recommend_score,
@@ -171,7 +171,7 @@ def save_module_data(module_code, title, description, module_credits, department
          comment_count, expected_gpa, actual_gpa,
          summary, grade_thresholds_json, grade_pairs_json, workload_json, prerequisite, preclusion,
          analysis_version)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 2)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, {analysis_version})
         ON CONFLICT (module_code) DO UPDATE SET
             title = EXCLUDED.title,
             description = EXCLUDED.description,
@@ -194,7 +194,7 @@ def save_module_data(module_code, title, description, module_credits, department
             workload_json = EXCLUDED.workload_json,
             prerequisite = EXCLUDED.prerequisite,
             preclusion = EXCLUDED.preclusion,
-            analysis_version = 2
+            analysis_version = {analysis_version}
     """, (
         module_code, title, description, module_credits, department,
         difficulty_score, recommend_score,

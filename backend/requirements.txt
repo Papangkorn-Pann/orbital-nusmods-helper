@@ -3,8 +3,6 @@ uvicorn[standard]
 requests
 beautifulsoup4
 vaderSentiment
-transformers
-torch
 python-dotenv
 slowapi
 google-genai

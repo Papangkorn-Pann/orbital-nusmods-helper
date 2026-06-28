@@ -1,5 +1,6 @@
 #import sqlite3
 import psycopg2
+import psycopg2.extras
 import secrets
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends, Query
@@ -110,8 +111,14 @@ def stop_session(session_id: int, body: StopSessionRequest,
     if not row:
         raise HTTPException(404, "Session not found")
 
-    start_dt = datetime.fromisoformat(row["start_time"].replace("Z", "+00:00"))
+    start_raw = row["start_time"]
+    start_dt = start_raw if isinstance(start_raw, datetime) else \
+               datetime.fromisoformat(str(start_raw).replace("Z", "+00:00"))
     end_dt = datetime.fromisoformat(body.end_time.replace("Z", "+00:00"))
+    if start_dt.tzinfo is None:
+        start_dt = start_dt.replace(tzinfo=timezone.utc)
+    if end_dt.tzinfo is None:
+        end_dt = end_dt.replace(tzinfo=timezone.utc)
     duration = max(0, int((end_dt - start_dt).total_seconds()))
 
     database_access.complete_session(session_id, body.end_time, duration, conn)

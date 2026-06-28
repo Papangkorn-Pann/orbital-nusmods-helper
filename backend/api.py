@@ -1,9 +1,6 @@
-import os
 import time
 import requests
-from dotenv import load_dotenv
-
-load_dotenv()
+from config import DISQUS_API_KEY
 
 ACAD_YEAR = "2025-2026"
 NUSMODS_BASE = "https://api.nusmods.com/v2"
@@ -11,8 +8,6 @@ NUSMODS_BASE = "https://api.nusmods.com/v2"
 # in-memory cache for the full module list (refreshed every hour)
 _module_list: list = []
 _module_list_fetched_at: float = 0
-
-DISQUS_API_KEY = 'wIgxYPvH9Qx6Aef53CpO0LQ1DGx4l3vmtyf9OgQ18z6ZWxLRhEV7GQf8ozAXFCuJ' #os.environ.get("DISQUS_API_KEY", "")
 DISQUS_FORUM = "nusmods-prod"
 
 FUNCTION_HEADERS = {
@@ -91,30 +86,41 @@ def fetch_disqus_comments(thread_id: str):
         return []
 
     url = "https://disqus.com/api/3.0/threads/listPosts.json"
+    all_comments = []
+    cursor = None
 
-    params = {
-        "api_key": DISQUS_API_KEY,
-        "forum": DISQUS_FORUM,
-        "thread": thread_id,
-    }
-
-    headers = FUNCTION_HEADERS
-
-    r = requests.get(url, params=params, headers=headers)
-
-    if r.status_code != 200:
-        return []
-
-    data = r.json()
-
-    return [
-        {
-            "author": p["author"]["name"],
-            "message": p["message"],
-            "likes": p.get("likes", 0)
+    while len(all_comments) < 500:
+        params = {
+            "api_key": DISQUS_API_KEY,
+            "forum": DISQUS_FORUM,
+            "thread": thread_id,
+            "limit": 100,
         }
-        for p in data.get("response", [])
-    ]
+        if cursor:
+            params["cursor"] = cursor
+
+        r = requests.get(url, params=params, headers=FUNCTION_HEADERS, timeout=10)
+        if r.status_code != 200:
+            break
+
+        data = r.json()
+        posts = data.get("response", [])
+        all_comments.extend([
+            {
+                "author": (p.get("author") or {}).get("name", "Anonymous"),
+                "message": p.get("message") or "",
+                "likes": p.get("likes", 0),
+            }
+            for p in posts
+            if not p.get("isDeleted") and not p.get("isSpam") and p.get("message")
+        ])
+
+        c = data.get("cursor", {})
+        if not c.get("hasNext"):
+            break
+        cursor = c.get("next")
+
+    return all_comments
 
 
 # ----------------------------

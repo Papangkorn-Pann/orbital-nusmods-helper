@@ -17,6 +17,7 @@ patterns (R0: special, R1A: final-year priority, R1B: all undergrads, R2: leftov
 import math
 #import sqlite3
 import psycopg2
+import psycopg2.extras
 from fastapi import APIRouter, HTTPException, Query, Depends
 import api as nusmods_api
 import database_access

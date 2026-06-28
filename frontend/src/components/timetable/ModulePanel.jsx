@@ -89,6 +89,7 @@ export default function ModulePanel({ sem, selections, onSlotChange, onRemoveMod
         )}
       </div>
 
+      <div style={styles.moduleList}>
       {selectedCodes.length === 0 && (
         <p style={styles.empty}>Search and add modules to build your timetable.</p>
       )}
@@ -124,12 +125,14 @@ export default function ModulePanel({ sem, selections, onSlotChange, onRemoveMod
           </div>
         )
       })}
+      </div>
     </div>
   )
 }
 
 const styles = {
-  panel: { display: 'flex', flexDirection: 'column', gap: 12, height: '100%', overflowY: 'auto' },
+  panel: { display: 'flex', flexDirection: 'column', gap: 12 },
+  moduleList: { display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto', maxHeight: 'calc(100vh - 200px)' },
   searchBox: { position: 'relative' },
   input: { width: '100%' },
   spinner: { position: 'absolute', right: 10, top: 9, fontSize: 12 },
@@ -143,7 +146,7 @@ const styles = {
     borderRadius: 8,
     boxShadow: '0 8px 16px rgba(0,0,0,.1)',
     zIndex: 50,
-    maxHeight: 260,
+    maxHeight: 400,
     overflowY: 'auto',
   },
   result: {
